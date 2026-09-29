@@ -17,7 +17,7 @@ export function useT() {
   return { t, m, lang };
 }
 
-export const COLORS = ['#e5484d', '#f76b15', '#e2a300', '#30a46c', '#12a594', '#0090ff', '#3e63dd', '#8e4ec6', '#d6409f', '#7a5c48'];
+export const COLORS = ['#e5484d', '#f76b15', '#e2a300', '#30a46c', '#12a594', '#0090ff', '#3e63dd', '#8e4ec6', '#d6409f', '#7a5c48', '#23272b'];
 /** piece choices (ids; most are emoji, some are names like 'iron') */
 export const EMOJIS = PIECES;
 

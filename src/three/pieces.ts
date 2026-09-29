@@ -145,17 +145,52 @@ const builders: Record<string, (m: ReturnType<typeof mats>) => THREE.Object3D[]>
       mesh(new THREE.TorusGeometry(0.1, 0.018, 8, 24), m.red, 0.19, 0.5, 0).rotateY(Math.PI / 2).rotateX(0.4), // collar
     ];
   },
-  // cat (sitting)
+  // lucky cat (maneki-neko): sitting, big round head, left paw raised and beckoning, collar with a bell, gold coin
   '🐱': (m) => {
-    const tail = mesh(new THREE.TorusGeometry(0.14, 0.03, 8, 20, Math.PI * 1.2), m.main, -0.2, 0.12, 0);
-    tail.rotation.x = Math.PI / 2;
+    const red = new THREE.MeshStandardMaterial({ color: '#d7263d', roughness: 0.4 });
+    const pink = new THREE.MeshStandardMaterial({ color: '#f4a3b4', roughness: 0.5 });
+    const ear = (z: number) => {
+      const e = cone(0.06, 0.1, m.main, 0.02, 0.8, z, 12);
+      e.rotation.x = z > 0 ? -0.35 : 0.35;
+      const inner = cone(0.035, 0.07, pink, 0.035, 0.79, z * 0.98, 12);
+      inner.rotation.x = e.rotation.x;
+      return [e, inner];
+    };
+    const whisker = (z: number, a: number) => {
+      const w = cyl(0.003, 0.003, 0.09, m.ink, 0.17, 0.6 + a * 0.02, z, 4);
+      w.rotation.set(Math.PI / 2, 0, a * 0.2);
+      w.position.z = z + Math.sign(z) * 0.03;
+      return w;
+    };
+    const eye = (z: number) => {
+      const e = mesh(new THREE.TorusGeometry(0.022, 0.006, 6, 16, Math.PI), m.ink, 0.165, 0.66, z);
+      e.rotation.y = Math.PI / 2;
+      return e;
+    };
+    // raised left paw (beckoning), right paw holding a gold coin
+    const armUp = limb(new THREE.Vector3(0.04, 0.36, 0.14), new THREE.Vector3(0.09, 0.66, 0.2), 0.045, 0.04, m.main);
+    const pawUp = sphere(0.055, m.main, 0.1, 0.7, 0.2, 0.8, 1, 1);
+    const pawPad = sphere(0.025, pink, 0.14, 0.7, 0.2, 0.4, 1, 1);
+    const coin = mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.02, 24), m.gold, 0.17, 0.3, -0.07);
+    coin.rotation.z = Math.PI / 2;
+    coin.scale.set(1, 1, 0.65);
     return [
-      sphere(0.2, m.main, 0, 0.24, 0, 1, 1.2, 1),
-      sphere(0.16, m.main, 0.04, 0.6, 0),
-      cone(0.06, 0.13, m.main, 0.04, 0.77, 0.09, 4), cone(0.06, 0.13, m.main, 0.04, 0.77, -0.09, 4),
-      sphere(0.03, m.ink, 0.17, 0.63, 0.06), sphere(0.03, m.ink, 0.17, 0.63, -0.06),
-      sphere(0.02, m.dark, 0.2, 0.57, 0),
-      tail,
+      sphere(0.2, m.main, 0, 0.2, 0, 1, 1.1, 1),                       // body
+      mesh(new RoundedBoxGeometry(0.34, 0.04, 0.34, 3, 0.015), m.dark, 0, 0.02, 0), // cushion
+      sphere(0.17, m.main, 0.02, 0.6, 0, 1, 0.92, 1.05),                // big head
+      sphere(0.07, m.white, 0.14, 0.56, 0, 0.5, 0.75, 1.3),             // muzzle
+      sphere(0.018, pink, 0.18, 0.59, 0),                               // nose
+      eye(0.06), eye(-0.06),
+      ...ear(0.1), ...ear(-0.1),
+      whisker(0.06, 1), whisker(0.06, -1), whisker(-0.06, 1), whisker(-0.06, -1),
+      mesh(new THREE.TorusGeometry(0.115, 0.024, 8, 28), red, 0.02, 0.44, 0).rotateX(Math.PI / 2), // collar
+      sphere(0.035, m.gold, 0.15, 0.39, 0),                            // bell
+      box(0.01, 0.004, 0.03, m.ink, 0.183, 0.385, 0),
+      armUp, pawUp, pawPad,
+      sphere(0.05, m.main, 0.16, 0.3, -0.12),                          // paw on the coin
+      coin,
+      sphere(0.06, m.main, 0.14, 0.05, 0.1, 1.3, 0.7, 1), sphere(0.06, m.main, 0.14, 0.05, -0.1, 1.3, 0.7, 1), // feet
+      mesh(new THREE.TorusGeometry(0.12, 0.028, 8, 20, Math.PI), m.main, -0.17, 0.1, 0).rotateX(Math.PI / 2), // tail
     ];
   },
   // rocket
@@ -199,34 +234,76 @@ const builders: Record<string, (m: ReturnType<typeof mats>) => THREE.Object3D[]>
     sphere(0.14, m.dark, -0.04, 0.3, 0.17, 0.8, 1.3, 0.35), sphere(0.14, m.dark, -0.04, 0.3, -0.17, 0.8, 1.3, 0.35),
     box(0.1, 0.03, 0.06, m.gold, 0.1, 0.02, 0.07), box(0.1, 0.03, 0.06, m.gold, 0.1, 0.02, -0.07),
   ],
-  // turtle
+  // turtle with a patterned shell: hexagonal plates on top, small plates round the rim
   '🐢': (m) => {
-    const shell = mesh(new THREE.SphereGeometry(0.28, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), m.main, 0, 0.08, 0);
+    const shell = mesh(new THREE.SphereGeometry(0.28, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), m.main, 0, 0.08, 0);
     shell.scale.set(1.1, 0.8, 1);
+    const plates: THREE.Object3D[] = [];
+    const R = 0.28, sx = 1.1, sy = 0.8, y0 = 0.08;
+    const plateAt = (theta: number, phi: number, size: number, mat: Mat) => {
+      const p = new THREE.Vector3(R * sx * Math.sin(phi) * Math.cos(theta), y0 + R * sy * Math.cos(phi), R * Math.sin(phi) * Math.sin(theta));
+      const n = new THREE.Vector3(p.x / (sx * sx), (p.y - y0) / (sy * sy), p.z).normalize();
+      const plate = mesh(new THREE.CylinderGeometry(size, size * 1.05, 0.014, 6), mat);
+      plate.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), n);
+      plate.position.copy(p).add(n.clone().multiplyScalar(0.004));
+      return plate;
+    };
+    plates.push(plateAt(0, 0, 0.07, m.dark));                           // centre plate
+    for (let k = 0; k < 6; k++) plates.push(plateAt((k / 6) * Math.PI * 2, 0.62, 0.062, m.dark)); // ring
+    for (let k = 0; k < 14; k++) plates.push(plateAt((k / 14) * Math.PI * 2 + 0.2, 1.22, 0.034, m.dark)); // rim
     return [
-      shell,
-      cyl(0.3, 0.3, 0.04, m.dark, 0, 0.08, 0, 24),
+      shell, ...plates,
+      cyl(0.3, 0.3, 0.035, m.dark, 0, 0.08, 0, 32),
       sphere(0.1, m.dark, 0.36, 0.14, 0, 1.2, 0.9, 0.9),
       sphere(0.02, m.ink, 0.43, 0.18, 0.05), sphere(0.02, m.ink, 0.43, 0.18, -0.05),
       sphere(0.07, m.dark, 0.2, 0.04, 0.22, 1.3, 0.6, 1), sphere(0.07, m.dark, 0.2, 0.04, -0.22, 1.3, 0.6, 1),
       sphere(0.07, m.dark, -0.2, 0.04, 0.22, 1.3, 0.6, 1), sphere(0.07, m.dark, -0.2, 0.04, -0.22, 1.3, 0.6, 1),
-      (() => { const t = cone(0.04, 0.12, m.dark, -0.34, 0.08, 0, 6); t.rotation.z = Math.PI / 2; return t; })(),
+      (() => { const t = cone(0.04, 0.12, m.dark, -0.34, 0.08, 0, 12); t.rotation.z = Math.PI / 2; return t; })(),
     ];
   },
-  // cactus in a pot
+  // cactus in a pot, with ribs and black spines
   '🌵': (m) => {
-    const armL = new THREE.Group();
-    armL.add(cyl(0.05, 0.05, 0.14, m.main, 0.1, 0.5, 0, 12), cyl(0.05, 0.05, 0.18, m.main, 0.16, 0.6, 0, 12), sphere(0.05, m.main, 0.16, 0.69, 0));
-    armL.children[0].rotation.z = Math.PI / 2;
-    const armR = armL.clone();
-    armR.rotation.y = Math.PI;
-    armR.position.y = -0.1;
+    const spines: THREE.Object3D[] = [];
+    const spineAt = (p: THREE.Vector3, dir: THREE.Vector3) => {
+      const sp = cone(0.007, 0.04, m.ink, 0, 0, 0, 5);
+      sp.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+      sp.position.copy(p).add(dir.clone().normalize().multiplyScalar(0.018));
+      spines.push(sp);
+    };
+    const column = (cx: number, y0: number, y1: number, r: number) => {
+      for (let y = y0; y <= y1; y += 0.07) {
+        for (let k = 0; k < 8; k++) {
+          const a = (k / 8) * Math.PI * 2 + (Math.round((y - y0) / 0.07) % 2) * (Math.PI / 8);
+          spineAt(new THREE.Vector3(cx + Math.cos(a) * r, y, Math.sin(a) * r), new THREE.Vector3(Math.cos(a), 0.25, Math.sin(a)));
+        }
+      }
+    };
+    column(0, 0.26, 0.76, 0.09);
+    column(0.16, 0.57, 0.66, 0.05);
+    column(-0.16, 0.47, 0.56, 0.05);
+    const ribs = Array.from({ length: 8 }, (_, k) => {
+      const a = (k / 8) * Math.PI * 2 + Math.PI / 8;
+      return cyl(0.012, 0.012, 0.56, m.dark, Math.cos(a) * 0.086, 0.5, Math.sin(a) * 0.086, 6);
+    });
+    const arm = (x: number, y: number, dir: number) => {
+      const g = new THREE.Group();
+      const h = cyl(0.05, 0.05, 0.14, m.main, x * 0.6, y, 0, 16);
+      h.rotation.z = Math.PI / 2;
+      g.add(h, cyl(0.05, 0.05, 0.14, m.main, x, y + 0.06, 0, 16), sphere(0.05, m.main, x, y + 0.13, 0));
+      g.position.x = 0;
+      void dir;
+      return g;
+    };
     return [
       cyl(0.17, 0.13, 0.2, m.terracotta, 0, 0.1, 0),
       cyl(0.18, 0.18, 0.04, m.terracotta, 0, 0.2, 0),
-      cyl(0.09, 0.09, 0.6, m.main, 0, 0.5, 0, 14),
+      cyl(0.16, 0.16, 0.01, m.ink, 0, 0.221, 0),                        // soil
+      cyl(0.09, 0.09, 0.6, m.main, 0, 0.5, 0, 24),
       sphere(0.09, m.main, 0, 0.8, 0),
-      armL, armR,
+      ...ribs,
+      arm(0.16, 0.52, 1), arm(-0.16, 0.42, -1),
+      ...spines,
+      sphere(0.028, m.ink, 0, 0.9, 0, 1, 0.6, 1),                       // dark flower bud on top
     ];
   },
   // football on a stand
@@ -661,22 +738,88 @@ const wheelbarrow: B = (m) => {
   return [tray, handle(0.1), handle(-0.1), strut(0.035), strut(-0.035), leg(0.1), leg(-0.1), wheelG];
 };
 
-/** horse */
-const horse: B = (m) => horseParts(m, false);
-
-/** sack of money with coins */
-const moneySack: B = (m) => {
-  const gold = new THREE.MeshStandardMaterial({ color: '#f2b632', roughness: 0.3, metalness: 0.6 });
-  const euro = textTex('€', null, '#ffffff', 64);
-  const coin = (x: number, y: number, z: number, t = 0) => { const c = cyl(0.05, 0.05, 0.014, gold, x, y, z, 20); c.rotation.x = t; return c; };
-  const ruffle = cyl(0.11, 0.07, 0.07, m.main, 0, 0.6, 0, 12); // gathered top of the sack
+/** equestrian statue: rearing horse with a rider (crested helmet, cape, raised sword), on a plinth */
+function limb(a: THREE.Vector3, b: THREE.Vector3, r1: number, r2: number, mat: Mat) {
+  const len = a.distanceTo(b);
+  const c = mesh(new THREE.CylinderGeometry(r2, r1, len, 14), mat);
+  c.position.copy(a).add(b).multiplyScalar(0.5);
+  c.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
+  return c;
+}
+const horse: B = (m) => {
+  const V = (x: number, y: number, z = 0) => new THREE.Vector3(x, y, z);
+  const P = 0.09; // top of the plinth
+  const neck = mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([V(0.14, P + 0.44), V(0.22, P + 0.58), V(0.29, P + 0.69)]), 16, 0.07, 16, false), m.main);
+  const mane = mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([V(0.1, P + 0.5), V(0.18, P + 0.65), V(0.25, P + 0.76)]), 16, 0.032, 8, false), m.dark);
+  mane.scale.z = 1.4;
+  const head = sphere(0.072, m.main, 0.35, P + 0.7, 0, 1.9, 0.9, 0.85);
+  head.rotation.z = -0.6;
+  const tail = mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([V(-0.3, P + 0.44), V(-0.38, P + 0.36), V(-0.39, P + 0.18)]), 12, 0.034, 8, false), m.dark);
+  const leg = (hip: THREE.Vector3, knee: THREE.Vector3, hoof: THREE.Vector3) => [
+    limb(hip, knee, 0.042, 0.032, m.main), sphere(0.033, m.main, knee.x, knee.y, knee.z),
+    limb(knee, hoof, 0.03, 0.03, m.main), sphere(0.034, m.dark, hoof.x, hoof.y + 0.01, hoof.z),
+  ];
+  const horseParts = [
+    sphere(0.19, m.main, -0.04, P + 0.42, 0, 1.55, 0.75, 0.72),
+    neck, mane, head, tail,
+    sphere(0.048, m.dark, 0.45, P + 0.65, 0, 1.1, 0.8, 0.85),
+    cone(0.026, 0.07, m.main, 0.31, P + 0.8, 0.045, 10), cone(0.026, 0.07, m.main, 0.31, P + 0.8, -0.045, 10),
+    ...leg(V(-0.22, P + 0.34, 0.075), V(-0.24, P + 0.17, 0.075), V(-0.22, P + 0.0, 0.075)),     // hind legs
+    ...leg(V(-0.22, P + 0.34, -0.075), V(-0.2, P + 0.17, -0.075), V(-0.2, P + 0.0, -0.075)),
+    ...leg(V(0.17, P + 0.34, -0.075), V(0.18, P + 0.17, -0.075), V(0.18, P + 0.0, -0.075)),     // front leg on the ground
+    ...leg(V(0.17, P + 0.34, 0.075), V(0.28, P + 0.25, 0.075), V(0.23, P + 0.13, 0.075)),      // front leg raised
+  ];
+  // rider sitting upright in the saddle
+  const S = V(-0.03, P + 0.55);
+  const rider: THREE.Object3D[] = [
+    sphere(0.1, m.ink, S.x, S.y - 0.005, 0, 1.2, 0.2, 1.05),                                        // saddle cloth
+    mesh(new THREE.CapsuleGeometry(0.052, 0.13, 6, 14), m.main, S.x, S.y + 0.12, 0),                 // body
+    sphere(0.046, m.main, S.x + 0.01, S.y + 0.27, 0),                                                // head
+    mesh(new THREE.SphereGeometry(0.051, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), m.dark, S.x + 0.01, S.y + 0.275, 0), // helmet
+    box(0.11, 0.04, 0.012, m.dark, S.x, S.y + 0.335, 0),                                              // crest
+    ...[0.1, -0.1].flatMap((z) => {                                                                     // legs down the horse's sides
+      const hip = V(S.x, S.y + 0.03, z * 0.5), knee = V(S.x + 0.08, S.y - 0.06, z * 1.25), foot = V(S.x + 0.06, S.y - 0.19, z * 1.25);
+      return [limb(hip, knee, 0.026, 0.023, m.main), limb(knee, foot, 0.022, 0.02, m.main), sphere(0.024, m.ink, foot.x + 0.01, foot.y, foot.z)];
+    }),
+    limb(V(S.x, S.y + 0.19, 0.058), V(S.x + 0.04, S.y + 0.33, 0.09), 0.021, 0.018, m.main),          // raised arm
+    limb(V(S.x + 0.04, S.y + 0.33, 0.09), V(S.x + 0.1, S.y + 0.5, 0.09), 0.007, 0.004, m.gold),       // sword
+    limb(V(S.x, S.y + 0.19, -0.058), V(S.x + 0.11, S.y + 0.12, -0.04), 0.021, 0.018, m.main),        // arm holding the reins
+  ];
+  const cape = mesh(new THREE.CylinderGeometry(0.062, 0.11, 0.22, 16, 1, true, Math.PI * 0.55, Math.PI * 0.9), m.dark, S.x - 0.02, S.y + 0.11, 0);
+  (cape.material as THREE.Material).side = THREE.DoubleSide;
   return [
-    sphere(0.23, m.main, 0, 0.23, 0, 1, 1.05, 1),
-    cyl(0.07, 0.12, 0.12, m.main, 0, 0.47, 0, 16),
-    mesh(new THREE.TorusGeometry(0.075, 0.018, 8, 20), m.dark, 0, 0.52, 0).rotateX(Math.PI / 2),
-    ruffle,
-    decalCircle(euro, 0.11, 0.232, 0.26, 0, Math.PI / 2),
-    coin(0.28, 0.007, 0.14), coin(0.3, 0.021, 0.16), coin(0.22, 0.007, -0.2), coin(-0.2, 0.05, 0.22, 1.1),
+    mesh(new RoundedBoxGeometry(0.66, 0.07, 0.3, 4, 0.02), m.ink, 0, 0.035, 0),      // plinth
+    mesh(new RoundedBoxGeometry(0.6, 0.03, 0.26, 3, 0.01), m.dark, 0, 0.083, 0),
+    ...horseParts, ...rider, cape,
+  ];
+};
+
+/** sack of money/** sack of money: sits flat on the floor, cloth folds, tied neck with a frilled top, € on the front */
+const moneySack: B = (m) => {
+  const euro = textTex('€', null, '#ffffff', 64);
+  const prof: [number, number][] = [
+    [0, 0], [0.19, 0], [0.25, 0.02], [0.28, 0.08], [0.28, 0.17], [0.25, 0.27], [0.19, 0.36], [0.11, 0.44], [0.075, 0.48],
+    [0.09, 0.52], [0.14, 0.58], [0.16, 0.62], [0.12, 0.63], [0.05, 0.6], [0, 0.59],
+  ];
+  const geo = new THREE.LatheGeometry(prof.map(([r, y]) => new THREE.Vector2(r, y)), 48, 0, Math.PI * 2);
+  // cloth: gentle folds on the body, a wavy frill on top
+  const pos = geo.getAttribute('position');
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    const a = Math.atan2(v.z, v.x);
+    const k = v.y > 0.49 ? 1 + 0.16 * Math.sin(9 * a) : v.y > 0.05 ? 1 + 0.035 * Math.sin(5 * a + v.y * 9) : 1;
+    pos.setXYZ(i, v.x * k, v.y, v.z * k);
+  }
+  geo.computeVertexNormals();
+  const sack = mesh(geo, m.main);
+  (m.main as THREE.Material).side = THREE.DoubleSide;
+  const rope = mesh(new THREE.TorusGeometry(0.085, 0.017, 8, 28), m.gold, 0, 0.475, 0).rotateX(Math.PI / 2);
+  const knotEnd = limb(new THREE.Vector3(0.085, 0.47, 0), new THREE.Vector3(0.14, 0.38, 0.03), 0.012, 0.01, m.gold);
+  return [
+    sack, rope, knotEnd,
+    decalCircle(euro, 0.11, 0.286, 0.16, 0, Math.PI / 2),
+    decalCircle(euro, 0.09, -0.286, 0.16, 0, -Math.PI / 2),
   ];
 };
 
@@ -707,7 +850,6 @@ const cannon: B = (m) => {
     box(0.3, 0.1, 0.03, wood, 0, 0.2, 0.09), box(0.3, 0.1, 0.03, wood, 0, 0.2, -0.09), // carriage cheeks
     trail, gun, wheelAt(0.15), wheelAt(-0.15),
     cyl(0.012, 0.012, 0.34, m.ink, 0.02, 0.14, 0, 6).rotateX(Math.PI / 2),
-    sphere(0.045, m.ink, 0.3, 0.045, 0.12), sphere(0.045, m.ink, 0.3, 0.045, 0.21), sphere(0.045, m.ink, 0.3, 0.12, 0.165),
   ];
 };
 
@@ -771,7 +913,7 @@ function pawn(m: ReturnType<typeof mats>) {
 /** pieces that roll smoothly instead of hopping */
 export const GLIDERS = new Set(['🚗', '🚢', '⛵', '🏍️', '🛵', 'barrow']);
 
-export const PIECE_HEIGHT: Record<string, number> = { '🎸': 1.05, '🚀': 0.95, '🌵': 0.9, '🚢': 0.65, '⛵': 0.65, horse: 0.9 };
+export const PIECE_HEIGHT: Record<string, number> = { '🎸': 1.05, '🚀': 0.95, '🌵': 0.95, '🚢': 0.65, '⛵': 0.65, horse: 1.1 };
 
 export function buildPiece(emoji: string, color: string): THREE.Group {
   const m = mats(color);
