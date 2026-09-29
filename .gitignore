@@ -1,34 +1,32 @@
-# Gradle files
-.gradle/
-build/
+# Εξαρτήσεις (τις ξαναφέρνει το "npm install" / "npm ci")
+node_modules/
 
-# Local configuration file (sdk path, etc)
-local.properties
+# Αποτελέσματα build (τα φτιάχνει ξανά το GitHub σε κάθε δημοσίευση)
+dist/
+dist-artifact/
+dev-dist/
+*.tsbuildinfo
 
-# Log/OS Files
+# Αποτελέσματα δοκιμών
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+coverage/
+
+# Αρχεία καταγραφής
 *.log
+npm-debug.log*
 
-# Android Studio generated files and folders
-captures/
-.externalNativeBuild/
-.cxx/
-*.aab
-*.apk
-output-metadata.json
+# Ρυθμίσεις/μυστικά τοπικού υπολογιστή
+.env
+.env.*
+!.env.example
 
-# IntelliJ
-*.iml
+# Αρχεία λειτουργικού και editor
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
 .idea/
-misc.xml
-deploymentTargetDropDown.xml
-render.experimental.xml
-
-# Keystore files
-*.jks
-*.keystore
-
-# Google Services (e.g. APIs or Firebase)
-google-services.json
-
-# Android Profiling
-*.hprof
+*.swp

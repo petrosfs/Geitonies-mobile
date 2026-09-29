@@ -1,0 +1,64 @@
+name: Test and deploy
+
+# Every push to main: lint -> unit tests -> build -> browser tests -> publish.
+# If any step fails, nothing is published and the live game stays as it was.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Unit tests (rules, dice, pieces, translations)
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+      - name: Browser tests
+        run: npm run e2e
+      - name: Online test (two phones via the public PeerJS server; informational)
+        continue-on-error: true
+        run: npm run e2e:online
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
+        with:
+          path: dist
+
+  deploy:
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
