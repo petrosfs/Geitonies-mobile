@@ -4,7 +4,7 @@ import type { Game } from './game/types';
 import { PieceIcon, useT } from './ui';
 
 const ICON: Record<string, string> = {
-  go: '➜', jail: '⛓', parking: 'P', gotojail: '🚓', chance: '?', chest: '✉', tax: '€', station: '🚆', utility: '💡',
+  go: '←', jail: '⛓', parking: 'P', gotojail: '🚓', chance: '?', chest: '✉', tax: '€', station: '🚆', utility: '💡',
 };
 
 /** grid position (1-based row/col) of square i on a board with s squares per side */

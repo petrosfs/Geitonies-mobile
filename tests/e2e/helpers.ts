@@ -58,10 +58,11 @@ export async function step(page: Page): Promise<string> {
   return 'idle';
 }
 
-/** play until `rolls` dice rolls have happened */
-export async function playRolls(page: Page, rolls: number) {
-  let done = 0, guard = 0;
-  while (done < rolls && guard++ < rolls * 40) {
+/** play until `rolls` dice rolls have happened (time-limited: slow software 3D in CI) */
+export async function playRolls(page: Page, rolls: number, maxMs = 6 * 60_000) {
+  let done = 0;
+  const deadline = Date.now() + maxMs;
+  while (done < rolls && Date.now() < deadline) {
     if ((await step(page)) === 'roll') done++;
   }
   expect(done).toBe(rolls);

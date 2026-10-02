@@ -7,6 +7,7 @@ import { CUSTOM_EFFECTS, type CustomEffectKind } from './game/cards';
 import type { CustomCard, Deck, Effect, PlayerSetup, Setup } from './game/types';
 import { Avatar, COLORS, EMOJIS, PieceIcon, readPhoto, useStore, useT } from './ui';
 import { pieceText } from './three/pieces';
+import { LightPicker } from './Game';
 
 const newId = () => Math.random().toString(36).slice(2, 10);
 
@@ -466,6 +467,8 @@ export function DeviceSettings() {
           <button className={fx.gfx === '2d' || !webgl ? 'on' : ''} onClick={() => store.setFx({ gfx: '2d' })}>{t('gfx2d')}</button>
         </div>
       </div>
+      
+      <LightPicker />
       <label className="check"><input type="checkbox" checked={fx.cinema} onChange={(e) => store.setFx({ cinema: e.target.checked })} />{t('fxCinema')}</label>
       <label className="check"><input type="checkbox" checked={fx.sound} onChange={(e) => store.setFx({ sound: e.target.checked })} />{t('fxSound')}</label>
       <label className="check"><input type="checkbox" checked={fx.vibrate} onChange={(e) => store.setFx({ vibrate: e.target.checked })} />{t('fxVibrate')}</label>
@@ -480,3 +483,4 @@ export function DeviceSettings() {
     </div>
   );
 }
+

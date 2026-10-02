@@ -10,6 +10,12 @@ import { buildPiece, GLIDERS, PIECE_HEIGHT } from './pieces';
 import { faceValues, simulateDice } from './dice';
 
 type Side = 'b' | 'l' | 't' | 'r';
+export type BoardLight = 'normal' | 'dim' | 'night';
+const LIGHT: Record<BoardLight, { board: string; exposure: number; hemi: number; sun: number; env: number; sky: string }> = {
+  normal: { board: '#e4e9ec', exposure: 1.05, hemi: 1.1, sun: 2.0, env: 0.55, sky: '#0f3b5f' },
+  dim: { board: '#c3cacf', exposure: 0.9, hemi: 0.9, sun: 1.6, env: 0.4, sky: '#0c2f4c' },
+  night: { board: '#8f989f', exposure: 0.75, hemi: 0.6, sun: 1.2, env: 0.25, sky: '#071a2b' },
+};
 interface Rect { x0: number; z0: number; x1: number; z1: number; side: Side }
 
 const CORNER = 1.5;
@@ -17,7 +23,7 @@ const PHI = 0.48;
 /** width of the decorated ring (neighbourhood buildings) around the board */
 const RING = 1.4;
 const ICON: Record<string, string> = {
-  go: '➜', jail: '⛓️', parking: '🅿️', gotojail: '🚓', chance: '❓', chest: '🎁', tax: '💶', station: '🚆', utility: '💡',
+  go: '←', jail: '⛓️', parking: '🅿️', gotojail: '🚓', chance: '❓', chest: '🎁', tax: '💶', station: '🚆', utility: '💡',
 };
 const CORNER_LABEL: Record<string, { el: string; en: string }> = {
   go: { el: 'ΑΦΕΤΗΡΙΑ', en: 'START' },
@@ -133,6 +139,7 @@ export class Scene3D {
     this.controls.maxPolarAngle = 1.3;
 
     const hemi = new THREE.HemisphereLight(0xffffff, 0x2a4a66, 1.1);
+    this.hemiLight = hemi;
     this.scene.add(hemi);
     const sun = new THREE.DirectionalLight(0xfff4e0, 2.0);
     sun.castShadow = true;
@@ -148,7 +155,7 @@ export class Scene3D {
     this.boardTex.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
     this.boardPlane = new THREE.Mesh(
       new THREE.PlaneGeometry(1, 1),
-      new THREE.MeshStandardMaterial({ map: this.boardTex, roughness: 0.85, toneMapped: false }),
+      new THREE.MeshStandardMaterial({ map: this.boardTex, color: '#e4e9ec', roughness: 0.92, envMapIntensity: 0.25 }),
     );
     this.boardPlane.rotation.x = -Math.PI / 2;
     this.boardPlane.receiveShadow = true;
@@ -182,6 +189,7 @@ export class Scene3D {
   }
 
   private sunLight: THREE.DirectionalLight;
+  private hemiLight!: THREE.HemisphereLight;
   private boardBase: THREE.Object3D[] = [];
 
   // ---------------- setup per board size ----------------
@@ -262,6 +270,17 @@ export class Scene3D {
 
   setFx(sound: boolean, vibrate: boolean, cinema: boolean) { this.sound = sound; this.vibrate = vibrate; this.cinema = cinema; }
 
+  /** board brightness: normal, dim, or night */
+  setLight(level: BoardLight) {
+    const L = LIGHT[level] ?? LIGHT.normal; // unknown/old value -> normal
+    (this.boardPlane.material as THREE.MeshStandardMaterial).color.set(L.board);
+    this.renderer.toneMappingExposure = L.exposure;
+    this.hemiLight.intensity = L.hemi;
+    this.sunLight.intensity = L.sun;
+    this.scene.environmentIntensity = L.env;
+    (this.scene.background as THREE.Color).set(L.sky);
+  }
+
   setFollow(f: boolean) {
     if (this.follow === f) return;
     this.follow = f;
@@ -280,6 +299,7 @@ export class Scene3D {
     const houseKey = JSON.stringify(Object.entries(g.props).map(([k, p]) => (p.houses ? k + ':' + p.houses : '')));
     if (houseKey !== this.houseKey) { this.houseKey = houseKey; this.drawBuildings(); }
 
+    this.drawPot(g);
     // dice
     const rolls = g.rolls ?? 0;
     if (this.rolls === -1 || first) {
@@ -432,11 +452,11 @@ export class Scene3D {
     const ctx = cv.getContext('2d')!;
     const k = cv.width / this.W;
     const font = (px: number, w = 600) => `${w} ${px}px Commissioner, system-ui, sans-serif`;
-    ctx.fillStyle = '#f4f7f9';
+    ctx.fillStyle = '#eef1ee';
     ctx.fillRect(0, 0, cv.width, cv.height);
     // centre
     const inner0 = CORNER * k, inner1 = (this.W - CORNER) * k;
-    ctx.fillStyle = '#e6eef3';
+    ctx.fillStyle = '#dfe7e4';
     ctx.fillRect(inner0, inner0, inner1 - inner0, inner1 - inner0);
     ctx.save();
     ctx.translate(cv.width / 2, cv.height / 2);
@@ -460,7 +480,7 @@ export class Scene3D {
       const lh = c.side === 'b' || c.side === 't' ? h : w;
       ctx.translate(-lw / 2, -lh / 2);
       const corner = i % this.s === 0;
-      ctx.fillStyle = corner ? '#e6eef3' : '#f4f7f9';
+      ctx.fillStyle = corner ? '#e2e8e5' : '#f1f3ef';
       ctx.fillRect(0, 0, lw, lh);
       ctx.strokeStyle = '#9fb3c1';
       ctx.lineWidth = k * 0.02;
@@ -796,7 +816,7 @@ export class Scene3D {
     const d = this.dieSize();
     this.dice.forEach((m, k) => {
       this.paintFaces(m, faceValues(2, values[k])); // +y face on top
-      const p = where?.[k] ?? new THREE.Vector3((k - 0.5) * d * 1.9, d / 2, 0);
+      const p = where?.[k] ?? new THREE.Vector3((k - 0.5) * d * 1.9, d / 2, this.potRadius() > 0 ? this.potRadius() + d * 1.2 : 0);
       m.position.set(p.x, d / 2, p.z);
       m.quaternion.setFromEuler(new THREE.Euler(0, k ? 0.4 : -0.3, 0));
     });
@@ -810,6 +830,7 @@ export class Scene3D {
         half: (this.W - 2 * CORNER) / 2 - 0.15,
         from: { x: cam.x, z: cam.z },
         scale: this.W / 12,
+        obstacle: this.potRadius(),
       });
       this.dice.forEach((m, k) => this.paintFaces(m, sim.faces[k]));
       this.diceAnim = { frames: sim.frames, hits: sim.hits, start: performance.now(), played: 0, values };
@@ -879,6 +900,58 @@ export class Scene3D {
   private busySince = 0;
 
   // ---------------- flying coins ----------------
+
+  private potGroup = new THREE.Group();
+  private potShown = -1;
+
+  /** free-parking money waiting in the middle of the board */
+  private drawPot(g: Game) {
+    const pot = g.rules.freeParking ? g.pot : 0;
+    if (pot === this.potShown) return;
+    this.potShown = pot;
+    this.potGroup.children.slice().forEach((c) => { this.potGroup.remove(c); (c as THREE.Mesh).geometry?.dispose?.(); });
+    if (!this.potGroup.parent) this.scene.add(this.potGroup);
+    if (pot <= 0) return;
+    const sc = this.tokenScale();
+    const geo = new THREE.CylinderGeometry(0.2 * sc, 0.2 * sc, 0.055 * sc, 24);
+    const coins = Math.min(48, Math.max(3, Math.round(pot / 20)));
+    const stacks = Math.min(6, Math.max(1, Math.ceil(coins / 8)));
+    let left = coins;
+    for (let k = 0; k < stacks; k++) {
+      const a = (k / stacks) * Math.PI * 2;
+      const r = stacks === 1 ? 0 : 0.34 * sc;
+      const n = Math.ceil(left / (stacks - k));
+      left -= n;
+      for (let j = 0; j < n; j++) {
+        const c = new THREE.Mesh(geo, this.coinMat);
+        c.position.set(Math.cos(a) * r + Math.sin(j * 1.7) * 0.02 * sc, (0.0275 + j * 0.056) * sc, Math.sin(a) * r + Math.cos(j * 2.3) * 0.02 * sc);
+        c.castShadow = true;
+        this.potGroup.add(c);
+      }
+    }
+    // label: "Parking: 350 €"
+    const cv = document.createElement('canvas');
+    cv.width = 256; cv.height = 96;
+    const x = cv.getContext('2d')!;
+    x.fillStyle = 'rgba(15,59,95,0.92)';
+    x.beginPath(); x.roundRect?.(4, 4, 248, 88, 24); x.fill();
+    x.fillStyle = '#ffffff'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.font = '600 26px Commissioner, system-ui, sans-serif';
+    x.fillText('🅿️ ' + (this.lang === 'el' ? 'Πάρκινγκ' : 'Parking'), 128, 32);
+    x.font = '800 34px Commissioner, system-ui, sans-serif';
+    x.fillStyle = '#f4b33d';
+    x.fillText(new Intl.NumberFormat(this.lang === 'el' ? 'el-GR' : 'en-IE', { maximumFractionDigits: 0 }).format(pot) + ' €', 128, 68);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }));
+    label.scale.set(1.5 * sc, 0.56 * sc, 1);
+    label.position.y = (0.55 + Math.ceil(coins / stacks) * 0.056) * sc;
+    label.renderOrder = 9;
+    this.potGroup.add(label);
+  }
+
+  /** radius of the coin pile, so the dice bounce off it */
+  private potRadius() { return this.potShown > 0 ? (this.potGroup.children.length > 2 ? 0.58 : 0.24) * this.tokenScale() : 0; }
 
   private logSeen = -1;
   private coinQueue: { from: () => THREE.Vector3; to: () => THREE.Vector3; n: number }[] = [];

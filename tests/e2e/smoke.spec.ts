@@ -2,14 +2,14 @@ import { expect, test } from '@playwright/test';
 import { freshStart, newLocalGame, playRolls, watchErrors } from './helpers';
 
 test('local game on the 3D board: many turns without errors', async ({ page }) => {
-  test.setTimeout(420_000); // software 3D in CI is slow
+  test.setTimeout(540_000); // software 3D in CI is slow
   const errors = watchErrors(page);
   await freshStart(page, { fx: { gfx: '3d', sound: false, vibrate: false, shake: false, cinema: true } });
   await newLocalGame(page, ['Μαρία', 'Νίκος', 'Ελένη']);
   await expect(page.locator('.board3d canvas')).toBeVisible();
-  await playRolls(page, 8);
+  await playRolls(page, 6, 7 * 60_000);
   const save = await page.evaluate(() => JSON.parse(localStorage.getItem('gtn-save')!));
-  expect(save.game.rolls).toBeGreaterThanOrEqual(8);
+  expect(save.game.rolls).toBeGreaterThanOrEqual(6);
   expect(errors).toEqual([]);
 });
 

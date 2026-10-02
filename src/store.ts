@@ -8,7 +8,8 @@ export type Screen = 'home' | 'setup' | 'join' | 'lobby' | 'game';
 export type Net = 'idle' | 'connecting' | 'ok' | 'lost' | 'error';
 
 /** settings of this device only */
-export interface Fx { gfx: '3d' | '2d'; sound: boolean; vibrate: boolean; shake: boolean; cinema: boolean }
+export type BoardLight = 'normal' | 'dim' | 'night';
+export interface Fx { gfx: '3d' | '2d'; sound: boolean; vibrate: boolean; shake: boolean; cinema: boolean; light: BoardLight }
 
 export interface ChatMsg { id: string; from: string; text: string; t: number }
 export const CHAT_MAX = 200;
@@ -48,7 +49,9 @@ type Msg =
   | { type: 'photos'; photos: Record<string, string> }
   | { type: 'err'; key: string }
   | { type: 'kicked' }
-  | { type: 'ping' }
+  | { type: 'ping'; v?: number; gid?: string }
+  | { type: 'sync' }
+  | { type: 'pong' }
   | { type: 'chat'; from: string; text: string }
   | { type: 'chatmsg'; msg: ChatMsg }
   | { type: 'chatlog'; msgs: ChatMsg[] };
@@ -81,12 +84,16 @@ export function emptySetup(): Setup {
   return { players: [], boardId: 'classic', names: [], customCards: [], rules: defaultRules() };
 }
 
-const DEFAULT_FX: Fx = { gfx: '3d', sound: true, vibrate: true, shake: true, cinema: true };
+const DEFAULT_FX: Fx = { gfx: '3d', sound: true, vibrate: true, shake: true, cinema: true, light: 'normal' };
 
 function loadPrefs(): { lang: Lang; device: string; fx: Fx } {
   try {
     const p = JSON.parse(localStorage.getItem(PREF_KEY) || '{}');
-    if (p.device) return { lang: p.lang === 'en' ? 'en' : 'el', device: p.device, fx: { ...DEFAULT_FX, ...(p.fx ?? {}) } };
+    if (p.device) {
+      const fx = { ...DEFAULT_FX, ...(p.fx ?? {}) };
+      if (!['normal', 'dim', 'night'].includes(fx.light)) fx.light = 'normal';
+      return { lang: p.lang === 'en' ? 'en' : 'el', device: p.device, fx };
+    }
   } catch { /* ignore */ }
   const prefs = { lang: (navigator.language?.startsWith('el') ? 'el' : 'en') as Lang, device: uid(12), fx: DEFAULT_FX };
   try { localStorage.setItem(PREF_KEY, JSON.stringify(prefs)); } catch { /* ignore */ }
@@ -107,7 +114,12 @@ class Store {
   private s: State;
   private listeners = new Set<() => void>();
   private peer: Peer | null = null;
-  private conns = new Map<string, DataConnection>(); // host: device -> conn
+  /** host: device -> its open connections (a computer may have the game open in more than one tab) */
+  private conns = new Map<string, Set<DataConnection>>();
+  /** tests only: drop this many state broadcasts (to check that phones catch up by themselves) */
+  dropStates = 0;
+  private allConns(): DataConnection[] { return [...this.conns.values()].flatMap((set) => [...set]); }
+  private sendDevice(device: string, m: Msg) { this.conns.get(device)?.forEach((c) => { if (c.open) c.send(m); }); }
   private lastSeen = new Map<string, number>();       // host: device -> ms
   private offSince = new Map<string, number>();       // host: device -> ms
   private hostConn: DataConnection | null = null;     // client
@@ -117,6 +129,7 @@ class Store {
   private beat = 0;
 
   constructor() {
+    document.addEventListener('visibilitychange', () => this.onResume());
     const prefs = loadPrefs();
     this.s = {
       screen: 'home', lang: prefs.lang, fx: prefs.fx, mode: 'local', device: prefs.device,
@@ -264,7 +277,11 @@ class Store {
       return true;
     } catch (e) {
       if (e instanceof RuleError) {
-        if (from) from.send({ type: 'err', key: 'e_' + e.message } satisfies Msg);
+        if (from) {
+          from.send({ type: 'err', key: 'e_' + e.message } satisfies Msg);
+          // the phone was probably looking at an old screen: send it the real state
+          if (this.s.game) from.send(this.stateMsg());
+        }
         else if (by !== 'host') this.toast('e_' + e.message);
         return false;
       }
@@ -290,7 +307,7 @@ class Store {
     if (this.s.chat.some((c) => c.id === msg.id)) return;
     const chat = [...this.s.chat, msg].slice(-200);
     this.set({ chat, chatSeen: mine ? chat.length : this.s.chatSeen });
-    if (this.s.mode === 'host') this.conns.forEach((c) => { if (c.open) c.send({ type: 'chatmsg', msg } satisfies Msg); });
+    if (this.s.mode === 'host') this.allConns().forEach((c) => { if (c.open) c.send({ type: 'chatmsg', msg } satisfies Msg); });
     if (!mine) {
       const name = this.s.game?.players.find((p) => p.id === msg.from)?.name ?? this.s.setup.players.find((p) => p.id === msg.from)?.name ?? '';
       this.toast('#' + (name ? name + ': ' : '') + msg.text);
@@ -306,7 +323,7 @@ class Store {
       const dev = g.players.find((p) => p.id === playerId)?.device;
       const ng = this.s.game;
       if (dev && ng && ng.players.filter((p) => p.device === dev && !p.out).length === 0) {
-        this.conns.get(dev)?.send({ type: 'kicked' } satisfies Msg);
+        this.sendDevice(dev, { type: 'kicked' });
       }
     } else {
       // lobby: remove the player; if it was the last one of that device, drop the device
@@ -314,9 +331,9 @@ class Store {
       const setup = { ...this.s.setup, players: this.s.setup.players.filter((p) => p.id !== playerId) };
       this.updateSetup(setup);
       if (pl && pl.device !== this.s.device && !setup.players.some((p) => p.device === pl.device)) {
-        const c = this.conns.get(pl.device);
-        c?.send({ type: 'kicked' } satisfies Msg);
-        window.setTimeout(() => c?.close(), 500);
+        const set = [...(this.conns.get(pl.device) ?? [])];
+        set.forEach((c) => c.send({ type: 'kicked' } satisfies Msg));
+        window.setTimeout(() => set.forEach((c) => c.close()), 500);
       }
     }
   }
@@ -338,6 +355,7 @@ class Store {
 
   private hostHeartbeat() {
     const now = Date.now();
+    if (this.peer && !this.peer.destroyed && this.peer.disconnected) this.keepSignalling(this.peer);
     const g = this.s.game;
     // presence
     const presence: Record<string, boolean> = { [this.s.device]: true };
@@ -345,7 +363,7 @@ class Store {
     let changed = false;
     for (const d of devices) {
       if (d === this.s.device) continue;
-      const on = this.conns.has(d) && now - (this.lastSeen.get(d) ?? 0) < 15000;
+      const on = (this.conns.get(d)?.size ?? 0) > 0 && now - (this.lastSeen.get(d) ?? 0) < 15000;
       presence[d] = on;
       if (on) this.offSince.delete(d);
       else if (!this.offSince.has(d)) this.offSince.set(d, now);
@@ -353,7 +371,11 @@ class Store {
     }
     if (changed) { this.set({ presence }); this.broadcastState(); }
     // ping every 5 s
-    if (++this.beat % 4 === 0) this.conns.forEach((c) => { if (c.open) c.send({ type: 'ping' } satisfies Msg); });
+    // ping every few seconds, with the game version so phones that missed an update can ask for it
+    if (++this.beat % 3 === 0) {
+      const ping: Msg = { type: 'ping', v: this.s.game?.v, gid: this.s.game?.gid };
+      this.allConns().forEach((c) => { if (c.open) c.send(ping); });
+    }
     // automatic moves for absent players
     if (!g || g.over) return;
     const limit = g.rules.autoMoveSec * 1000;
@@ -379,7 +401,8 @@ class Store {
       if (this.s.game) { this.persist(); this.startTimers(); }
     });
     peer.on('connection', (conn) => this.onHostConn(conn));
-    peer.on('disconnected', () => { try { peer.reconnect(); } catch { /* ignore */ } });
+    // lost the signalling server: keep retrying, otherwise nobody new (or refreshed) can connect
+    peer.on('disconnected', () => this.keepSignalling(peer));
     peer.on('error', (err: { type?: string }) => {
       if (err.type === 'unavailable-id') {
         peer.destroy();
@@ -389,9 +412,49 @@ class Store {
         return;
       }
       if (err.type === 'peer-unavailable') return;
+      if (['network', 'server-error', 'socket-error', 'socket-closed', 'disconnected'].includes(err.type ?? '')) {
+        this.keepSignalling(peer);
+        return;
+      }
       this.set({ net: 'error' });
       this.toast('netError');
     });
+  }
+
+  private signalTimer = 0;
+  /** host: reconnect to the signalling server every few seconds until it works */
+  private keepSignalling(peer: Peer) {
+    if (this.signalTimer) return; // a retry is already scheduled (don't keep pushing it back)
+    this.signalTimer = window.setTimeout(() => {
+      this.signalTimer = 0;
+      if (this.peer !== peer || peer.destroyed) return;
+      if (peer.disconnected) {
+        try { peer.reconnect(); } catch { /* try again below */ }
+        this.keepSignalling(peer);
+      }
+    }, 2500);
+  }
+
+  /** the app came back to the foreground (phones pause web pages in the background) */
+  private onResume = () => {
+    if (document.visibilityState !== 'visible') return;
+    const { mode, game, room, gen, net } = this.s;
+    if (mode === 'host') {
+      if (!this.peer || this.peer.destroyed) this.openHost(room, gen);
+      else if (this.peer.disconnected) this.keepSignalling(this.peer);
+    } else if (mode === 'client' && game && net !== 'ok' && net !== 'connecting') {
+      this.connectClient(room, gen, true);
+    }
+  };
+
+  /** client: drop the connection and connect again (menu button) */
+  reconnect() {
+    const { mode, room, gen } = this.s;
+    if (mode === 'client') { this.set({ lostSince: 0 }); this.connectClient(room, gen, true); }
+    else if (mode === 'host') {
+      if (!this.peer || this.peer.destroyed) this.openHost(room, gen);
+      else { if (this.peer.disconnected) this.keepSignalling(this.peer); this.broadcastState(); }
+    }
   }
 
   private onHostConn(conn: DataConnection) {
@@ -402,9 +465,8 @@ class Store {
       switch (m.type) {
         case 'hello': {
           device = m.device;
-          const old = this.conns.get(device);
-          if (old && old !== conn) old.close();
-          this.conns.set(device, conn);
+          if (!this.conns.has(device)) this.conns.set(device, new Set());
+          this.conns.get(device)!.add(conn);
           this.lastSeen.set(device, Date.now());
           const g = this.s.game;
           if (g) {
@@ -433,6 +495,10 @@ class Store {
           this.updateSetup({ ...this.s.setup, players }, photos);
           return;
         }
+        case 'sync': {
+          if (this.s.game) conn.send(this.stateMsg()); else conn.send(this.lobbyMsg());
+          return;
+        }
         case 'chat': {
           const players = this.s.game?.players ?? this.s.setup.players;
           const p = players.find((x) => x.id === m.from);
@@ -441,6 +507,9 @@ class Store {
           if (text) this.addChat({ id: uid(8), from: m.from, text, t: Date.now() }, false);
           return;
         }
+        case 'ping':
+          conn.send({ type: 'pong' } satisfies Msg);
+          return;
         case 'act': {
           const g = this.s.game;
           const p = g?.players.find((x) => x.id === m.by);
@@ -452,7 +521,11 @@ class Store {
       }
     });
     conn.on('close', () => {
-      if (device && this.conns.get(device) === conn) this.conns.delete(device);
+      if (device) {
+        const set = this.conns.get(device);
+        set?.delete(conn);
+        if (set && !set.size) this.conns.delete(device);
+      }
       this.hostHeartbeat();
     });
     conn.on('error', () => { /* handled by close */ });
@@ -466,12 +539,13 @@ class Store {
   }
   private broadcastLobby() {
     const m = this.lobbyMsg();
-    this.conns.forEach((c) => { if (c.open) c.send(m); });
+    this.allConns().forEach((c) => { if (c.open) c.send(m); });
   }
   private broadcastState() {
     if (this.s.mode !== 'host' || !this.s.game) return;
+    if (this.dropStates > 0) { this.dropStates--; return; }
     const m = this.stateMsg();
-    this.conns.forEach((c) => { if (c.open) c.send(m); });
+    this.allConns().forEach((c) => { if (c.open) c.send(m); });
   }
 
   // ---------------- networking: client ----------------
@@ -530,7 +604,7 @@ class Store {
     this.stopTimers();
     this.timers.push(window.setInterval(() => {
       if (this.hostConn?.open) this.hostConn.send({ type: 'ping' } satisfies Msg);
-      if (this.s.net === 'ok' && Date.now() - this.lastHostMsg > 16000) {
+      if (this.s.net === 'ok' && Date.now() - this.lastHostMsg > 30000) {
         this.hostConn?.close();
         this.hostConn = null;
         this.onHostLost();
@@ -570,13 +644,19 @@ class Store {
         return;
       }
       case 'state': {
-        // ignore late copies of the same game, but always accept a new game (rematch)
-        if (this.s.game && m.game.gid === this.s.game.gid && m.game.v < this.s.game.v && this.s.hostDevice === m.hostDevice) return;
+        // the host is the authority: always take its state (messages on one connection arrive in order,
+        // and after a reconnect or a host restart the host's copy is the true one)
         this.set({ game: m.game, presence: m.presence, hostDevice: m.hostDevice, screen: 'game' });
         this.persist();
         return;
       }
+      case 'ping':
+        // any difference from the host's copy (newer, older or another game): ask for the real state
+        if (this.s.game && m.v !== undefined && (m.gid !== this.s.game.gid || m.v !== this.s.game.v)) this.send({ type: 'sync' });
+        return;
       case 'err':
+        // the host said no: we may be looking at an old state, so ask for the current one
+        if (m.key.startsWith('e_')) this.send({ type: 'sync' });
         if (m.key === 'started' || m.key === 'full') {
           this.toast(m.key);
           if (m.key === 'started' && !this.s.game) this.set({ net: 'error' });
@@ -641,7 +721,7 @@ class Store {
 
   private clearPeer() {
     window.clearTimeout(this.retryTimer);
-    this.conns.forEach((c) => c.close());
+    this.allConns().forEach((c) => c.close());
     this.conns.clear();
     this.hostConn?.close();
     this.hostConn = null;
@@ -660,3 +740,6 @@ class Store {
 
 export const store = new Store();
 export { BOARDS };
+
+// debugging/tests only: expose the store when localStorage 'gtn-debug' is set
+try { if (localStorage.getItem('gtn-debug')) (window as unknown as { __store: Store }).__store = store; } catch { /* ignore */ }

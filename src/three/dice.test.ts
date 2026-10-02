@@ -29,7 +29,8 @@ describe('dice', () => {
       const half = b.inner / 2 - 0.15;
       const a = rand() * Math.PI * 2;
       const values: [number, number] = [1 + Math.floor(rand() * 6), 1 + Math.floor(rand() * 6)];
-      const sim = simulateDice(values, { d, half, from: { x: Math.sin(a), z: Math.cos(a) }, scale: b.W / 12, rand });
+      const obstacle = i % 3 === 0 ? 0.3 * (b.W / 12) : 0;   // every third throw: parking money in the middle
+      const sim = simulateDice(values, { d, half, from: { x: Math.sin(a), z: Math.cos(a) }, scale: b.W / 12, rand, obstacle });
       maxFrames = Math.max(maxFrames, sim.frames.length);
       totalFrames += sim.frames.length;
       expect(sim.frames.length).toBeGreaterThan(10);
@@ -49,6 +50,7 @@ describe('dice', () => {
         for (const f of sim.frames) expect(f[k * 7 + 1]).toBeGreaterThan(d * 0.2);
       }
       expect(p[0].distanceTo(p[1])).toBeGreaterThanOrEqual(d * 1.2); // not overlapping
+      if (obstacle) for (const q of p) expect(Math.hypot(q.x, q.z)).toBeGreaterThan(obstacle + d * 0.5); // not on the money
     }
     console.log(`dice: max ${(maxFrames / 60).toFixed(1)} s, average ${(totalFrames / 3000 / 60).toFixed(2)} s`);
   }, 300000);

@@ -125,7 +125,7 @@ export function GameScreen() {
       <div className="dice" key={`${g.turnNo}-${g.doubles}-${g.dice?.join()}`}>
         {g.dice ? <><Die n={g.dice[0]} tint={cur.color} /><Die n={g.dice[1]} tint={cur.color} /></> : <><Die n={5} /><Die n={2} /></>}
       </div>
-      {g.rules.freeParking && <div className="small">{t('pot', { n: m(g.pot) })}</div>}
+      {g.rules.freeParking && <div className="small">💰 {t('pot', { n: m(g.pot) })}</div>}
       {remaining !== null && (
         <div className={'small' + (g.timeUp ? ' warn' : '')}>{g.timeUp ? t('lastRound') : t('timeLeft', { t: fmtTime(remaining) })}</div>
       )}
@@ -136,7 +136,7 @@ export function GameScreen() {
   );
 
   return (
-    <div className="screen game" onPointerDown={unlockAudio}>
+    <div className={'screen game light-' + (s.fx.light ?? 'normal')} onPointerDown={unlockAudio}>
       <header className="bar gamebar">
         <button className="btn ghost small" aria-label={t('menu')} onClick={() => setMenu(true)}>✕</button>
         <div className="cashes">
@@ -156,6 +156,12 @@ export function GameScreen() {
       ))}
 
       {s.mode === 'client' && s.net === 'lost' && <HostLost />}
+      {s.mode === 'client' && (s.net === 'connecting' || s.net === 'error') && (
+        <div className="banner warn">
+          <div>{t('reconnecting')}</div>
+          <button className="btn small" onClick={() => store.reconnect()}>🔄 {t('reconnect')}</button>
+        </div>
+      )}
 
       {use3d ? (
         <Board3D g={g} onSquare={setInfo} onBusy={setBusy} overlay={
@@ -164,7 +170,7 @@ export function GameScreen() {
               <Avatar color={cur.color} emoji={cur.emoji} photo={s.photos[cur.id]} size={24} />
               <span>{cur.name}</span>
             </div>
-            {g.rules.freeParking && <div className="small">{t('pot', { n: m(g.pot) })}</div>}
+            {g.rules.freeParking && <div className="small">💰 {t('pot', { n: m(g.pot) })}</div>}
             {remaining !== null && (
               <div className={'small' + (g.timeUp ? ' warn' : '')}>{g.timeUp ? t('lastRound') : t('timeLeft', { t: fmtTime(remaining) })}</div>
             )}
@@ -237,6 +243,10 @@ export function GameScreen() {
         <Modal onClose={() => setMenu(false)}>
           <h2>{t('menu')}</h2>
           <button className="btn primary wide" onClick={() => setMenu(false)}>{t('continueGame')}</button>
+          <LightPicker />
+          {s.mode !== 'local' && (
+            <button className="btn wide" onClick={() => { store.reconnect(); setMenu(false); }}>🔄 {t('reconnect')}</button>
+          )}
           <button className="btn wide" onClick={() => store.goHome()}>{t('exitSaved')}</button>
           <p className="small muted">{t('exitSavedHint')}</p>
           {s.mode !== 'client' && (
@@ -659,6 +669,24 @@ function TradeResponse({ g, tr, onCounter }: { g: Game; tr: Trade; onCounter: ()
       </div>
       <button className="btn ghost wide" onClick={onCounter}>{t('counter')}</button>
     </Modal>
+  );
+}
+
+// ---------------- board brightness ----------------
+
+export function LightPicker() {
+  const { t } = useT();
+  const s = useStore();
+  const cur = s.fx.light ?? 'normal';
+  return (
+    <div className="field">
+      <span>💡 {t('boardLight')}</span>
+      <div className="seg">
+        {(['normal', 'dim', 'night'] as const).map((l) => (
+          <button key={l} className={cur === l ? 'on' : ''} onClick={() => store.setFx({ light: l })}>{t('light_' + l)}</button>
+        ))}
+      </div>
+    </div>
   );
 }
 

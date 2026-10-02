@@ -22,6 +22,8 @@ export interface DiceOpts {
   from: { x: number; z: number }; // unit direction the dice are thrown from
   scale: number;      // speed scale
   rand?: () => number;
+  /** radius of something round standing in the middle (the parking money); 0 = nothing */
+  obstacle?: number;
 }
 
 /** hard cap: 3.5 s of rolling; whatever is left is smoothed away by the settle step */
@@ -79,6 +81,12 @@ export function simulateDice(values: [number, number], o: DiceOpts): DiceSim {
   plane(-half, 0, 0, 0, Math.PI / 2);
   plane(half, 0, 0, 0, -Math.PI / 2);
   plane(0, d * 12, 0, Math.PI / 2, 0);      // ceiling, so nothing can fly away
+  const obst = o.obstacle ?? 0;
+  if (obst > 0) {
+    const pile = new CANNON.Body({ mass: 0, material: mat, shape: new CANNON.Cylinder(obst, obst, d * 1.6, 16) });
+    pile.position.set(0, d * 0.8, 0);
+    world.addBody(pile);
+  }
 
   const from = new THREE.Vector3(o.from.x, 0, o.from.z);
   if (from.lengthSq() < 1e-6) from.set(0, 0, 1);
@@ -140,6 +148,13 @@ export function simulateDice(values: [number, number], o: DiceOpts): DiceSim {
   const end = pos.map((p) => new THREE.Vector3(
     Math.max(-lim, Math.min(lim, p.x)), d / 2, Math.max(-lim, Math.min(lim, p.z)),
   ));
+  // never rest on top of the money pile
+  if (obst > 0) {
+    end.forEach((p) => {
+      const r = Math.hypot(p.x, p.z), min = obst + d * 0.75;
+      if (r < min) { const a = r > 1e-6 ? Math.atan2(p.z, p.x) : Math.random() * 6.28; p.x = Math.cos(a) * min; p.z = Math.sin(a) * min; }
+    });
+  }
   const gap = new THREE.Vector3().subVectors(end[1], end[0]).setY(0);
   const minGap = d * 1.5;
   if (gap.length() < minGap) {
