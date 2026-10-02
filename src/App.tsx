@@ -3,7 +3,8 @@ import { store } from './store';
 import { Die } from './Board';
 import { GameScreen } from './Game';
 import { JoinScreen, LobbyScreen, SetupScreen } from './Setup';
-import { Modal, useStore, useT } from './ui';
+import { useStore, useT } from './ui';
+import { Modal } from './components';
 
 const PREVIEW = !!import.meta.env.VITE_ARTIFACT;
 

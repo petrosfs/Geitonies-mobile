@@ -7,14 +7,15 @@ import {
 } from './game/engine';
 import type { Game, Offer, Pending, Player, Trade } from './game/types';
 import { BoardView, Die } from './Board';
-import { Avatar, cardText, groupColor, logText, Modal, PieceIcon, playerName, useStore, useT } from './ui';
+import { cardText, groupColor, logText, playerName, useStore, useT } from './ui';
+import { Avatar, Modal, PieceIcon } from './components';
 import { pieceText } from './three/pieces';
 
 type Sheet = 'none' | 'props' | 'players' | 'trade' | 'log' | 'chat';
 type Auction = Extract<Pending, { k: 'auction' }>;
 
 function useNow(ms = 1000) {
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const i = setInterval(() => setNow(Date.now()), ms); return () => clearInterval(i); }, [ms]);
   return now;
 }
@@ -27,7 +28,7 @@ export function GameScreen() {
   const s = useStore();
   const { t, m, lang } = useT();
   const g = s.game!;
-  const [sheet, setSheet] = useState<Sheet>('none');
+  const [sheetState, setSheet] = useState<Sheet>('none');
   const [info, setInfo] = useState<number | null>(null);
   const [counterOf, setCounterOf] = useState<Trade | null>(null);
   const [busy, setBusy] = useState(false);
@@ -43,12 +44,12 @@ export function GameScreen() {
   const actor = openAuction ? null : localWaiting[0] ?? null;
   const [confirmed, setConfirmed] = useState<string | null>(local.length === 1 ? local[0].id : null);
   const needHandoff = !!actor && local.length > 1 && confirmed !== actor && !g.over && !busy;
+  // no sheet stays open while the phone is being passed to someone else
+  const sheet: Sheet = needHandoff ? 'none' : sheetState;
   const viewer = (actor && !needHandoff ? actor : null)
     ?? (confirmed && local.some((p) => p.id === confirmed) ? confirmed : null)
     ?? local[0]?.id ?? null;
 
-  // close sheets that no longer make sense
-  useEffect(() => { if (needHandoff) setSheet('none'); }, [needHandoff]);
 
   // "X goes to jail!" banner, shown once the 3D animation has finished
   const seqRef = useRef(g.logSeq ?? 0);
@@ -59,11 +60,11 @@ export function GameScreen() {
     const fresh = Math.min(Math.max(0, seq - seqRef.current), g.log.length);
     seqRef.current = seq;
     const names = g.log.slice(g.log.length - fresh).filter((e) => e.k === 'jailed').map((e) => playerName(g, String(e.a?.p)));
-    if (names.length) { setCalm(false); setJailQueue((q) => [...q, ...names]); }
+    if (names.length) { setCalm(() => false); setJailQueue((q) => [...q, ...names]); }
   }, [g]);
   // wait until the scene has been calm for a moment (the 3D animation starts one frame after the state changes)
   useEffect(() => {
-    if (busy) { setCalm(false); return; }
+    if (busy) return; // (calm was cleared when the animation started, in onBusy)
     const id = window.setTimeout(() => setCalm(true), use3d ? 350 : 0);
     return () => clearTimeout(id);
   }, [busy, use3d, g.v]);
@@ -164,7 +165,7 @@ export function GameScreen() {
       )}
 
       {use3d ? (
-        <Board3D g={g} onSquare={setInfo} onBusy={setBusy} overlay={
+        <Board3D g={g} onSquare={setInfo} onBusy={(b) => { setBusy(b); if (b) setCalm(false); }} overlay={
           <div className="b3-overlay">
             <div className="turnline" style={{ color: cur.color }}>
               <Avatar color={cur.color} emoji={cur.emoji} photo={s.photos[cur.id]} size={24} />

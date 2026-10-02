@@ -1,19 +1,14 @@
 import type { ReactNode } from 'react';
 import { board, sqName } from './game/engine';
 import type { Game } from './game/types';
-import { PieceIcon, useT } from './ui';
+import { useT } from './ui';
+import { PieceIcon } from './components';
+import { cellPos } from './game/layout';
 
 const ICON: Record<string, string> = {
   go: '←', jail: '⛓', parking: 'P', gotojail: '🚓', chance: '?', chest: '✉', tax: '€', station: '🚆', utility: '💡',
 };
 
-/** grid position (1-based row/col) of square i on a board with s squares per side */
-export function cellPos(i: number, s: number): { row: number; col: number; side: 'b' | 'l' | 't' | 'r' } {
-  if (i <= s) return { row: s + 1, col: s + 1 - i, side: 'b' };
-  if (i <= 2 * s) return { row: s + 1 - (i - s), col: 1, side: 'l' };
-  if (i <= 3 * s) return { row: 1, col: 1 + (i - 2 * s), side: 't' };
-  return { row: 1 + (i - 3 * s), col: s + 1, side: 'r' };
-}
 
 export function BoardView({ g, onSquare, center }: { g: Game; onSquare: (sq: number) => void; center: ReactNode }) {
   const { lang } = useT();

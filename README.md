@@ -1,178 +1,109 @@
-# 🎲 Γειτονιές
+<div align="center">
 
-Επιτραπέζιο παιχνίδι ακινήτων για **2–10 παίκτες** στο κινητό, με αθηναϊκές γειτονιές, 3D ταμπλό και online παιχνίδι.
-Αγοράζεις γειτονιές, χτίζεις σπίτια και ξενοδοχεία, εισπράττεις ενοίκια και προσπαθείς να μη χρεοκοπήσεις.
+# 🎲 Geitonies (Γειτονιές)
 
-## ▶️ Παίξε τώρα: **https://petrosfs.github.io/Geitonies-mobile/**
+**A real-estate board game for phones — 2 to 10 players, a 3D board, and online play without a server.**
 
-> Το όνομα «Γειτονιές» είναι προσωρινό. Αλλάζει εύκολα (δες «Για όσους αλλάζουν τον κώδικα»).
+[![Test and deploy](https://github.com/petrosfs/Geitonies-mobile/actions/workflows/deploy.yml/badge.svg)](https://github.com/petrosfs/Geitonies-mobile/actions/workflows/deploy.yml)
+![React](https://img.shields.io/badge/React-19-61dafb?logo=react&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)
+![three.js](https://img.shields.io/badge/three.js-3D-000000?logo=threedotjs&logoColor=white)
+![PWA](https://img.shields.io/badge/PWA-installable-5a0fc8?logo=pwa&logoColor=white)
+
+### ▶️ [Play now: petrosfs.github.io/Geitonies-mobile](https://petrosfs.github.io/Geitonies-mobile/)
+
+🇬🇷 [Οδηγός για παίκτες στα Ελληνικά](docs/README.el.md)
+
+<img src="docs/screenshots/board-3d.webp" width="230" alt="3D board"> <img src="docs/screenshots/follow-camera.webp" width="230" alt="Camera following a piece"> <img src="docs/screenshots/setup.webp" width="230" alt="Choosing a piece">
+
+</div>
+
+## What it is
+
+A complete, Monopoly-style property game set in Athens neighbourhoods, built as an installable web app.
+Players buy neighbourhoods, build houses and hotels, trade, auction and try not to go bankrupt —
+either passing one phone around the table, or each on their own phone over the internet.
+
+It runs entirely in the browser: no app store, no accounts, no backend, no running costs.
+
+## Features
+
+- **Full rules engine** — rent and colour groups, even building with a limited bank stock, mortgages, jail (3 doubles, fines, cards), Chance / Community Chest, open and sealed auctions, trades with counter-offers, bankruptcy to players or the bank, time-limited games, optional house rules.
+- **Two boards** — classic (40 squares, 2–6 players) and a large 56-square board for 7–10 players.
+- **3D board** (three.js) — physics-simulated dice, 23 hand-modelled pieces, a small city of buildings around the board, a camera that follows each move, animated coins for every payment, a jail cage with sirens. A 2D board is available for older phones.
+- **Online play, peer-to-peer** — one phone hosts, the others join with a 5-letter code or a QR code. Chat, presence, automatic moves for absent players, reconnection, and host take-over if the host disappears.
+- **Customisable** — rename neighbourhoods, write your own cards, pick colours, pieces and photos, choose house rules.
+- **Installable PWA** — works offline for one-phone games, updates itself.
+- **Greek and English** interface; end-of-game statistics and one-tap rematch.
+
+| | | | |
+|:-:|:-:|:-:|:-:|
+| <img src="docs/screenshots/home.webp" width="190" alt="Home"> | <img src="docs/screenshots/card.webp" width="190" alt="Card"> | <img src="docs/screenshots/jail.webp" width="190" alt="Jail"> | <img src="docs/screenshots/board-2d.webp" width="190" alt="2D board"> |
+| Home | Chance card | Jail | 2D board |
+
+<p align="center"><img src="docs/screenshots/pieces.webp" width="760" alt="The 23 pieces"></p>
+
+## Engineering highlights
+
+- **Pure, deterministic game engine.** All rules live in a side-effect-free reducer (`apply(state, player, action) → state`) with a seeded RNG. The UI, the network layer and the tests all drive the same function. → [`src/game/engine.ts`](src/game/engine.ts)
+- **Host-authoritative peer-to-peer networking.** WebRTC data channels via PeerJS; only the host applies actions and broadcasts state. Clients self-heal: any version mismatch triggers a resync, rejected moves return the true state, the host keeps reconnecting to the signalling server, and a client can take over as host after 5 minutes. → [`src/store.ts`](src/store.ts)
+- **Physics that always agrees with the rules.** The dice roll is decided by the engine first; the throw is then simulated ahead of time with cannon-es, the faces are painted so the resting top face shows the rolled number, and the result is played back frame by frame. → [`src/three/dice.ts`](src/three/dice.ts)
+- **Procedural 3D content.** All pieces and buildings are built from code (lathes, extrusions, lofted ship hull, bump-mapped thimble), so there are no model files to license or download. → [`src/three/pieces.ts`](src/three/pieces.ts)
+- **Robustness by design.** Animations can never block the game (watchdog + fallbacks), WebGL context loss rebuilds the scene, and old saved games keep loading after updates.
+
+More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+
+## Testing and CI
+
+Every push to `main` runs **lint → unit tests → build → browser tests → deploy**; nothing is published unless everything passes.
+
+- **69 unit tests (Vitest)** — targeted rule tests, 60 fully simulated random games checking invariants, 3,000 simulated dice throws (always flat, inside the board, showing the rolled value), every 3D piece, and translation coverage (every message exists in Greek and English).
+- **10 end-to-end tests (Playwright)** — real browser play on the 3D and 2D boards, menus, jail, language switch, end of game and rematch, and two-phone online tests: chat, sync, the host losing the internet, and a phone stuck on an outdated screen recovering by itself.
+
+## Tech stack
+
+React 19 · TypeScript · Vite · three.js · cannon-es · PeerJS (WebRTC) · vite-plugin-pwa · Vitest · Playwright · Oxlint · GitHub Actions · GitHub Pages
+
+## Run locally
+
+```bash
+npm install
+npm run dev          # http://localhost:5173  (add --host to open it from a phone on the same Wi-Fi)
+npm test             # unit tests
+npx playwright install chromium && npm run e2e   # browser tests
+npm run build        # production build in dist/
+```
+
+## Project structure
+
+```
+src/
+  game/        rules engine, boards, cards, types (pure TypeScript, no UI)
+  three/       3D scene, dice physics, procedural pieces, thumbnails
+  store.ts     app state, saving, peer-to-peer networking, chat
+  *.tsx        screens: home, setup, lobby, game
+tests/e2e/     Playwright browser tests (local and online)
+docs/          architecture notes, Greek player guide, screenshots
+```
+
+## Development
+
+Designed, directed and tested by [@petrosfs](https://github.com/petrosfs); implemented with AI pair-programming
+(Claude by Anthropic). Feature decisions, rules choices, playtesting and bug reports from real games drove each iteration —
+see the [changelog](CHANGELOG.md).
+
+## Roadmap
+
+- Computer opponents (bots) for solo play and to replace players who leave
+- Theme packs with other cities
+- Own TURN server option for networks that block peer-to-peer connections
+
+## License
+
+© petrosfs. **All rights reserved.** The source code is published so it can be viewed and evaluated;
+no licence is granted to copy, modify, redistribute or use it commercially. You are welcome to play the game at the link above.
+For any other use, please [open an issue](https://github.com/petrosfs/Geitonies-mobile/issues) to ask.
 
 ---
 
-## Για τους παίκτες
-
-### Πώς το ανοίγω
-
-Άνοιξε το **https://petrosfs.github.io/Geitonies-mobile/** στον browser του κινητού:
-Safari στο iPhone, Chrome στο Android. Δεν χρειάζεται λογαριασμός ούτε κατέβασμα από store.
-
-### Πώς το βάζω στην αρχική οθόνη (σαν εφαρμογή)
-
-- **iPhone (Safari):** κουμπί Κοινής χρήσης ⬆️ → «Προσθήκη στην οθόνη Αφετηρίας».
-- **Android (Chrome):** μενού ⋮ → «Εγκατάσταση εφαρμογής» ή «Προσθήκη στην αρχική οθόνη».
-
-Μετά ανοίγει με ένα πάτημα, σε πλήρη οθόνη, και το παιχνίδι σε ένα κινητό δουλεύει και **χωρίς ίντερνετ**.
-Οι ενημερώσεις έρχονται μόνες τους την επόμενη φορά που θα το ανοίξεις με ίντερνετ.
-
-### Τρόποι παιχνιδιού
-
-**Σε ένα κινητό (περνάει από χέρι σε χέρι)**
-1. «Νέα παρτίδα σε αυτό το κινητό».
-2. Πρόσθεσε παίκτες: όνομα, χρώμα (11 επιλογές), πιόνι (23 επιλογές) και, αν θέλεις, φωτογραφία.
-3. Διάλεξε ταμπλό, ονόματα περιοχών, δικές σας κάρτες και κανόνες, και πάτα «Έναρξη».
-4. Πριν από κάθε σειρά εμφανίζεται «Δώσε το κινητό στον/στην …», ώστε να ξέρετε ποιος παίζει.
-
-**Online (κάθε παίκτης στο δικό του κινητό)**
-
-Χρειάζεται ίντερνετ σε όλα τα κινητά. Δεν χρειάζεται να είστε στο ίδιο Wi‑Fi ή στο ίδιο μέρος.
-
-*Ο οικοδεσπότης (αυτός που «στήνει» την παρτίδα):*
-1. Ανοίγει το παιχνίδι και πατά **«Νέα online παρτίδα»**.
-2. Περιμένει μέχρι πάνω να εμφανιστεί ο **κωδικός** (5 γράμματα/αριθμοί, π.χ. `K7RQ2`) με το μήνυμα «Οι άλλοι ανοίγουν το παιχνίδι…». Αν γράφει «Σύνδεση…», περιμένει λίγα δευτερόλεπτα.
-3. Στέλνει τον κωδικό στους φίλους του (π.χ. Viber, Messenger), ή τους δείχνει το **QR** για να το σκανάρουν με την κάμερα.
-4. Προσθέτει τον εαυτό του στους **Παίκτες** και διαλέγει ταμπλό και κανόνες.
-
-*Οι φίλοι:*
-1. Ανοίγουν το ίδιο link και πατούν **«Σύνδεση σε παρτίδα»**. Γράφουν τον κωδικό και πατούν «Σύνδεση». Αν σκανάρουν το QR, η σύνδεση γίνεται μόνη της.
-2. Πατούν **«Προσθήκη παίκτη»**, βάζουν όνομα, χρώμα και πιόνι, και πατούν **«Αποθήκευση»**.
-
-*Έναρξη:* ο οικοδεσπότης βλέπει όλους στη λίστα του και πατά **«Έναρξη παιχνιδιού»**. Τα κινητά όλων περνούν στο ταμπλό.
-
-Συμβουλές:
-- Ο οικοδεσπότης ας κρατά το παιχνίδι **ανοιχτό στην οθόνη**. Αν κλείσει την εφαρμογή ή κλειδώσει το κινητό για πολύ, οι άλλοι αποσυνδέονται μέχρι να ξαναγυρίσει.
-- Αν κάποιος βγει από την εφαρμογή, ανοίγει ξανά το link → **«Συνέχεια παρτίδας»** και ξανασυνδέεται.
-- Ο καθένας παίζει μόνο όταν είναι η σειρά του. Οι υπόλοιποι βλέπουν όλες τις κινήσεις ζωντανά.
-
-Μπορείτε να συνδυάσετε τα δύο: π.χ. δύο άτομα σε ένα κινητό και άλλοι τρεις στα δικά τους.
-Στο online υπάρχει και **τσατ** 💬 με γρήγορες φράσεις.
-
-### Κανόνες με λίγα λόγια
-
-- Ρίχνεις δύο ζάρια, με κουμπί ή **κουνώντας το κινητό**. Με διπλές ξαναρίχνεις, και με τρίτες διπλές πας φυλακή.
-- Σταματάς σε ελεύθερη περιοχή: την αγοράζεις ή πάει σε **δημοπρασία**.
-- Σε περιοχή άλλου πληρώνεις ενοίκιο. Αν έχει όλη την ομάδα χρώματος, το ενοίκιο διπλασιάζεται, και με σπίτια ανεβαίνει πολύ.
-- Με όλη την ομάδα χρώματος χτίζεις σπίτια ισόποσα και μετά ξενοδοχείο.
-- Όταν χρειάζεσαι χρήματα, πουλάς σπίτια ή βάζεις υποθήκες από «Τα ακίνητά μου».
-- **Ανταλλαγές:** στη σειρά σου προτείνεις χρήματα, ακίνητα ή κάρτες σε άλλον, κι εκείνος δέχεται, αρνείται ή κάνει αντιπρόταση.
-- **Φυλακή:** βγαίνεις με διπλή, με 50 €, ή με κάρτα αποφυλάκισης.
-- Όποιος δεν μπορεί να πληρώσει χρεοκοπεί. Νικητής είναι ο τελευταίος που μένει, ή, αν έχετε βάλει όριο χρόνου, όποιος έχει τη μεγαλύτερη αξία στο τέλος του γύρου.
-
-**Προαιρετικοί «κανόνες σπιτιού»:** φόροι στο Πάρκινγκ, διπλός μισθός στην Αφετηρία, όχι ενοίκιο όσο ο ιδιοκτήτης είναι στη φυλακή, αγορές μόνο μετά τον πρώτο γύρο.
-
-### Χρήσιμα
-
-- **✕ πάνω αριστερά:** συνέχεια, έξοδος (η παρτίδα αποθηκεύεται) ή διαγραφή παρτίδας.
-- **Ρυθμίσεις κάθε κινητού** (Setup → Κανόνες): 3D/2D ταμπλό, ήχος, δόνηση, ρίψη με κούνημα, κάμερα που ακολουθεί το πιόνι.
-- **3D ταμπλό:** με ένα δάχτυλο γυρνάς την κάμερα, με δύο κάνεις ζουμ, με 🎯 επιστρέφεις στην αυτόματη κάμερα. Αν πατήσεις ένα τετράγωνο, βλέπεις τις τιμές του.
-- **Στο τέλος:** στατιστικά, γράφημα πλούτου και **Ρεβάνς** με τους ίδιους παίκτες.
-
-### Αν κάτι δεν πάει καλά
-
-| Πρόβλημα | Τι κάνεις |
-|---|---|
-| Το online δεν συνδέεται | Ελέγξτε τον κωδικό και ότι ο οικοδεσπότης έχει ανοιχτό το παιχνίδι. Κάποια δίκτυα (π.χ. πανεπιστημιακό Wi‑Fi) μπλοκάρουν τις απευθείας συνδέσεις: δοκιμάστε με δεδομένα κινητού ή παίξτε σε ένα κινητό. |
-| Ο οικοδεσπότης αποσυνδέθηκε | Η παρτίδα περιμένει. Αν δεν γυρίσει σε 5 λεπτά, οποιοσδήποτε πατά «Ανάληψη οικοδεσπότη» και συνεχίζετε. |
-| Κάποιος παίκτης βγήκε | Μετά από λίγο παίζει αυτόματα, και ο οικοδεσπότης μπορεί να τον αφαιρέσει (Παίκτες → Αποβολή). |
-| Το 3D είναι αργό | Setup → Κανόνες → Ταμπλό: **2D**. |
-| Δεν ακούγεται ήχος | Άγγιξε μία φορά την οθόνη (κανόνας των browsers) και έλεγξε τη ρύθμιση «Ήχος». |
-| Δόνηση στο iPhone | Δεν υποστηρίζεται από το Safari. |
-
----
-
-## Δημοσίευση στο GitHub Pages (δωρεάν)
-
-Χρειάζεσαι λογαριασμό στο [github.com](https://github.com). Το repository πρέπει να είναι **Public**,
-γιατί το GitHub Pages είναι δωρεάν μόνο για δημόσια repositories. Η εξαίρεση είναι αν έχεις GitHub Student Pack.
-
-### Α. Από τη σελίδα του GitHub (χωρίς εντολές)
-
-1. Αποσυμπίεσε το zip σε έναν φάκελο.
-2. Στο GitHub: **+** πάνω δεξιά → **New repository** → όνομα (εδώ: `Geitonies-mobile`) → **Public** → **Create repository**.
-3. Πάτα **uploading an existing file** και σύρε μέσα **όλα** τα αρχεία και τους φακέλους.
-   Πρόσεξε να μπουν και τα κρυφά `.github` και `.gitignore`: στα Windows ενεργοποίησε Προβολή → Κρυφά στοιχεία, στο Mac πάτα Cmd+Shift+. για να φανούν.
-4. Πάτα **Commit changes**.
-5. Έλεγξε ότι υπάρχει το αρχείο `.github/workflows/deploy.yml`. Αν λείπει: **Add file → Create new file**, γράψε ως όνομα `.github/workflows/deploy.yml`, επικόλλησε το περιεχόμενό του από το zip και πάτα **Commit**.
-6. **Settings → Pages → Build and deployment → Source: GitHub Actions**.
-7. Στην καρτέλα **Actions** περίμενε να πρασινίσει το «Test and deploy» (~10 λεπτά).
-8. Το παιχνίδι είναι στο `https://ΟΝΟΜΑ-ΧΡΗΣΤΗ.github.io/ΟΝΟΜΑ-REPOSITORY/`. Εδώ: **https://petrosfs.github.io/Geitonies-mobile/**. Το ακριβές link φαίνεται και στο **Settings → Pages**.
-
-### Ενημέρωση με νέα έκδοση
-
-1. Αποσυμπίεσε το νέο zip.
-2. Στο repository: **Add file → Upload files** και σύρε **όλα** τα περιεχόμενα του φακέλου. Όσα έχουν το ίδιο όνομα αντικαθίστανται.
-3. **Commit changes**. Σε ~13 λεπτά, όταν πρασινίσει το **Actions**, η νέα έκδοση είναι online.
-4. Οι παίκτες παίρνουν την ενημέρωση μόνοι τους την επόμενη φορά που ανοίγουν το παιχνίδι. Αν δεν φαίνεται, κλείνουν και ξανανοίγουν την εφαρμογή.
-
-### Β. Με git (από τερματικό)
-
-```bash
-cd Geitonies-mobile
-git init
-git add .
-git commit -m "Γειτονιές"
-git branch -M main
-git remote add origin https://github.com/petrosfs/Geitonies-mobile.git
-git push -u origin main
-```
-
-Μετά κάνε τα βήματα 6–8 παραπάνω.
-
-### Τι γίνεται σε κάθε ενημέρωση
-
-Σε κάθε αλλαγή που ανεβαίνει στο `main`, το GitHub τρέχει αυτόματα:
-**έλεγχο κώδικα → unit tests → build → δοκιμές σε browser → δημοσίευση**.
-Αν αποτύχει οποιοδήποτε βήμα, **δεν** δημοσιεύεται τίποτα και οι παίκτες συνεχίζουν με την προηγούμενη έκδοση.
-Το αποτέλεσμα φαίνεται στην καρτέλα **Actions**, όπου σε αποτυχία υπάρχει και αναφορά (`playwright-report`).
-
----
-
-## Για όσους αλλάζουν τον κώδικα
-
-Χρειάζεται [Node.js](https://nodejs.org) 20 ή νεότερο.
-
-```bash
-npm install          # μία φορά
-npm run dev          # τοπικά στο http://localhost:5173 (με --host και από κινητό στο ίδιο Wi‑Fi)
-npm run build        # τελική έκδοση στον φάκελο dist/
-```
-
-### Δοκιμές
-
-```bash
-npm test                          # unit tests: κανόνες, 3000 ρίψεις ζαριών, 23 πιόνια, μεταφράσεις
-npx playwright install chromium   # μία φορά
-npm run e2e                       # ο browser παίζει: 3D, 2D, μενού, φυλακή, γλώσσα, τέλος + ρεβάνς
-npm run e2e:online                # δύο «κινητά» online: σύνδεση, τσατ, συγχρονισμός (θέλει ίντερνετ)
-npm run check                     # όλα μαζί, όπως στο GitHub
-```
-
-### Πού αλλάζουν τα πράγματα
-
-| Τι | Αρχείο |
-|---|---|
-| Τιμές, ενοίκια, αρχικά χρήματα, σπίτια/ξενοδοχεία, ονόματα περιοχών | `src/game/boards.ts` |
-| Κάρτες Ευκαιρίας / Κοινοτικού Ταμείου | `src/game/cards.ts` |
-| Κανόνες παιχνιδιού | `src/game/engine.ts` |
-| Κείμενα (Ελληνικά / Αγγλικά) | `src/i18n.ts` |
-| Όνομα εφαρμογής | `src/i18n.ts` (`appName`), `vite.config.ts` (manifest), `index.html` |
-| 3D ταμπλό, ζάρια, πόλη γύρω από το ταμπλό | `src/three/scene.ts`, `src/three/dice.ts` |
-| 3D πιόνια | `src/three/pieces.ts` |
-| Online σύνδεση, αποθήκευση, τσατ | `src/store.ts` |
-| Χρώματα / εμφάνιση | `src/styles.css` |
-
-### Τεχνικά
-
-- React + TypeScript + Vite, εγκαθίσταται ως PWA (λειτουργεί και offline).
-- 3D με three.js και φυσική ζαριών με cannon-es. Τα πιόνια είναι σχεδιασμένα με κώδικα, χωρίς εξωτερικά μοντέλα.
-- Online peer-to-peer με PeerJS: ο δημόσιος server χρησιμοποιείται μόνο για να «βρεθούν» οι συσκευές. Δεν υπάρχει δικός μας server, κόστος ή λογαριασμοί. Ο οικοδεσπότης κρατά την επίσημη κατάσταση της παρτίδας.
-- Όλα τα δεδομένα μένουν στα κινητά των παικτών (localStorage).
+<sub>Not affiliated with or endorsed by Hasbro. "Monopoly" is a trademark of Hasbro; this is an independent game with its own artwork, pieces and texts.</sub>

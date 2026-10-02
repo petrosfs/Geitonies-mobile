@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { cellPos } from '../Board';
+import { cellPos } from '../game/layout';
 import { board as boardOf, sqName } from '../game/engine';
 import type { Game, Lang } from '../game/types';
 import { buzz, clack, clank, siren, tick } from '../fx';

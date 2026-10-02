@@ -5,7 +5,8 @@ import { hasWebGL, requestMotion } from './fx';
 import { BOARDS, isOwnable } from './game/boards';
 import { CUSTOM_EFFECTS, type CustomEffectKind } from './game/cards';
 import type { CustomCard, Deck, Effect, PlayerSetup, Setup } from './game/types';
-import { Avatar, COLORS, EMOJIS, PieceIcon, readPhoto, useStore, useT } from './ui';
+import { COLORS, EMOJIS, readPhoto, useStore, useT } from './ui';
+import { Avatar, PieceIcon } from './components';
 import { pieceText } from './three/pieces';
 import { LightPicker } from './Game';
 
