@@ -34,6 +34,7 @@ It runs entirely in the browser: no app store, no accounts, no backend, no runni
 - **Online play, peer-to-peer** — one phone hosts, the others join with a 5-letter code or a QR code. Chat, presence, automatic moves for absent players, reconnection, and host take-over if the host disappears.
 - **Customisable** — rename neighbourhoods, write your own cards, pick colours, pieces and photos, choose house rules.
 - **Installable PWA** — works offline for one-phone games, updates itself.
+- **Built-in rules** — short, expandable sections; inside a game they start with that game's own settings.
 - **Greek and English** interface; end-of-game statistics and one-tap rematch.
 
 | | | | |
@@ -57,8 +58,8 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 Every push to `main` runs **lint → unit tests → build → browser tests → deploy**; nothing is published unless everything passes.
 
-- **69 unit tests (Vitest)** — targeted rule tests, 60 fully simulated random games checking invariants, 3,000 simulated dice throws (always flat, inside the board, showing the rolled value), every 3D piece, and translation coverage (every message exists in Greek and English).
-- **10 end-to-end tests (Playwright)** — real browser play on the 3D and 2D boards, menus, jail, language switch, end of game and rematch, and two-phone online tests: chat, sync, the host losing the internet, and a phone stuck on an outdated screen recovering by itself.
+- **71 unit tests (Vitest)** — targeted rule tests, 60 fully simulated random games checking invariants, 3,000 simulated dice throws (always flat, inside the board, showing the rolled value), every 3D piece, translation coverage (every message exists in Greek and English), and the in-app rules (every amount filled in from the board).
+- **11 end-to-end tests (Playwright)** — real browser play on the 3D and 2D boards, menus, rules, jail, language switch, end of game and rematch, and two-phone online tests: chat, sync, the host losing the internet, and a phone stuck on an outdated screen recovering by itself.
 
 ## Tech stack
 

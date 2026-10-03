@@ -1,16 +1,18 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { store } from './store';
 import { Die } from './Board';
 import { GameScreen } from './Game';
 import { JoinScreen, LobbyScreen, SetupScreen } from './Setup';
 import { useStore, useT } from './ui';
 import { Modal } from './components';
+import { RulesSheet } from './Rules';
 
 const PREVIEW = !!import.meta.env.VITE_ARTIFACT;
 
 function Home() {
   const { t } = useT();
   const s = useStore();
+  const [rules, setRules] = useState(false);
   return (
     <div className="screen home">
       <div className="hero">
@@ -25,7 +27,9 @@ function Home() {
         <button className={'btn wide ' + (s.hasSave ? '' : 'primary')} onClick={() => store.newLocal()}>{t('newLocal')}</button>
         {!PREVIEW && <button className="btn wide" onClick={() => store.newHost()}>{t('hostOnline')}</button>}
         {!PREVIEW && <button className="btn wide" onClick={() => store.openJoin()}>{t('joinOnline')}</button>}
+        <button className="btn wide ghost-light" onClick={() => setRules(true)}>📖 {t('rules')}</button>
       </div>
+      {rules && <RulesSheet onClose={() => setRules(false)} />}
       <div className="langs">
         <button className={s.lang === 'el' ? 'on' : ''} onClick={() => store.setLang('el')}>Ελληνικά</button>
         <button className={s.lang === 'en' ? 'on' : ''} onClick={() => store.setLang('en')}>English</button>

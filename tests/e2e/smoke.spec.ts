@@ -123,3 +123,19 @@ test('end of game: statistics, then a rematch with the same players', async ({ p
   expect(after).toMatchObject({ n: 3, out: 0 });
   expect(errors).toEqual([]);
 });
+
+test('rules: from the home screen, and inside a game with that game\'s settings', async ({ page }) => {
+  const errors = watchErrors(page);
+  await freshStart(page, { fx: { gfx: '2d', sound: false, vibrate: false, shake: false, cinema: false } });
+  await page.getByRole('button', { name: /Κανόνες/ }).click();
+  await expect(page.locator('.rule')).toHaveCount(13);
+  await page.locator('.rule summary', { hasText: 'Φυλακή' }).click();
+  await expect(page.locator('.rule[open]')).toContainText('50 €');
+  await page.getByRole('button', { name: 'Κλείσιμο' }).click();
+  await newLocalGame(page, ['Α', 'Β']);
+  await page.locator('.gamebar .btn').first().click();
+  await page.getByRole('button', { name: /Κανόνες/ }).click();
+  await expect(page.locator('.rules-game')).toContainText('Σε αυτή την παρτίδα');
+  await expect(page.locator('.rules-game')).toContainText('Ανοιχτή');
+  expect(errors).toEqual([]);
+});

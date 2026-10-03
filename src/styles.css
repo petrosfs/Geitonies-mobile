@@ -229,6 +229,7 @@ input, select, textarea {
   z-index: 20; animation: fade 0.15s ease-out;
 }
 .modal {
+  color: var(--ink); /* dialogs never inherit the colours of the screen behind them */
   background: var(--card); width: 100%; max-width: 560px; max-height: 88dvh; overflow-y: auto;
   border-radius: 18px 18px 0 0; padding: 16px 18px max(16px, env(safe-area-inset-bottom));
   border-top: 7px solid var(--sea); animation: rise 0.2s ease-out;
@@ -369,3 +370,19 @@ h2 .piece-img { vertical-align: -6px; }
 /* board brightness (2D board; the 3D board is lit accordingly) */
 .light-dim .board { filter: brightness(0.86); }
 .light-night .board { filter: brightness(0.66) saturate(0.9); }
+
+/* ---------- rules ---------- */
+.home .btn.ghost-light { background: transparent; color: #fff; box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.4); }
+.rules-game { background: #fff6df; border-radius: 12px; padding: 4px 12px 8px; margin-bottom: 10px; }
+.rules-game h3 { margin-top: 0.5em; }
+.rules-game ul, .rule ul { margin: 0; padding-left: 1.1em; }
+.rules-game li, .rule li { padding: 3px 0; font-size: 0.92rem; }
+.rules-list { display: flex; flex-direction: column; gap: 6px; }
+.rule { background: var(--paper); border-radius: 12px; padding: 4px 10px; }
+.rule summary { list-style: none; display: flex; gap: 10px; align-items: center; padding: 8px 0; cursor: pointer; }
+.rule summary::-webkit-details-marker { display: none; }
+.rule summary::after { content: '▾'; margin-left: auto; color: var(--ink-soft); transition: transform 0.15s; }
+.rule[open] summary::after { transform: rotate(180deg); }
+.rule-icon { font-size: 1.4rem; flex: none; }
+.rule-head { display: flex; flex-direction: column; gap: 1px; }
+.rule ul { padding-bottom: 8px; }

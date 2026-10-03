@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Board3D } from './Board3D';
+import { RulesSheet } from './Rules';
 import { buzz, hasWebGL, listenShake, requestMotion, siren, unlockAudio } from './fx';
 import { CHAT_MAX, store, TAKEOVER_MS } from './store';
 import {
@@ -33,6 +34,7 @@ export function GameScreen() {
   const [counterOf, setCounterOf] = useState<Trade | null>(null);
   const [busy, setBusy] = useState(false);
   const [menu, setMenu] = useState(false);
+  const [showRules, setShowRules] = useState(false);
   const use3d = useMemo(() => s.fx.gfx === '3d' && hasWebGL(), [s.fx.gfx]);
 
   const local = g.players.filter((p) => p.device === s.device && !p.out);
@@ -244,6 +246,7 @@ export function GameScreen() {
         <Modal onClose={() => setMenu(false)}>
           <h2>{t('menu')}</h2>
           <button className="btn primary wide" onClick={() => setMenu(false)}>{t('continueGame')}</button>
+          <button className="btn wide" onClick={() => { setMenu(false); setShowRules(true); }}>📖 {t('rules')}</button>
           <LightPicker />
           {s.mode !== 'local' && (
             <button className="btn wide" onClick={() => { store.reconnect(); setMenu(false); }}>🔄 {t('reconnect')}</button>
@@ -258,6 +261,7 @@ export function GameScreen() {
           )}
         </Modal>
       )}
+      {showRules && <RulesSheet g={g} onClose={() => setShowRules(false)} />}
       {info !== null && <SquareInfo g={g} sq={info} onClose={() => setInfo(null)} />}
       {g.over && !busy && <GameOver g={g} />}
     </div>

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.0
+- Rules of the game in the app: from the home screen and from the in-game ✕ menu; short sections that open for details, in Greek and English.
+- Inside a game, the rules start with that game's settings (board, amounts, auction type, house rules, time limit, custom cards).
+- Amounts in the rules come from the board being played, and are checked by tests against the rules engine.
+- Fix: dialogs opened from the home screen had unreadable white text.
+
 ## 1.3.1
 - Project documentation: English README with screenshots, architecture notes, Greek player guide, changelog; licence: all rights reserved.
 - Code quality: zero lint warnings; UI helpers and components split; monthly dependency updates (Dependabot).
