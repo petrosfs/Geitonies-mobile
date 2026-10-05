@@ -139,3 +139,25 @@ test('rules: from the home screen, and inside a game with that game\'s settings'
   await expect(page.locator('.rules-game')).toContainText('Ανοιχτή');
   expect(errors).toEqual([]);
 });
+
+test('names: choose Thessaloniki and move a neighbourhood to another colour', async ({ page }) => {
+  const errors = watchErrors(page);
+  await freshStart(page, { fx: { gfx: '2d', sound: false, vibrate: false, shake: false, cinema: false } });
+  await page.getByText('Νέα παρτίδα σε αυτό το κινητό').click();
+  for (const n of ['Α', 'Β']) {
+    await page.getByText('Προσθήκη παίκτη').click();
+    await page.locator('.pedit input').first().fill(n);
+  }
+  await page.getByRole('button', { name: 'Ονόματα' }).click();
+  await page.getByRole('button', { name: 'Θεσσαλονίκη' }).click();
+  await expect(page.locator('.name-row input').first()).toHaveAttribute('placeholder', 'Μενεμένη');
+  // move the first (cheapest) neighbourhood to the most expensive square
+  await page.locator('.name-group').first().locator('.move').first().click();
+  await page.locator('.name-group').nth(7).locator('.move').last().click();
+  await expect(page.locator('.name-group').nth(7).locator('input').last()).toHaveAttribute('placeholder', 'Μενεμένη');
+  await page.getByText('Έναρξη παιχνιδιού').click();
+  const g = await page.evaluate(() => JSON.parse(localStorage.getItem('gtn-save')!).game);
+  expect(g.city).toBe('thessaloniki');
+  expect(g.nameMap[39]).toBe(1);
+  expect(errors).toEqual([]);
+});

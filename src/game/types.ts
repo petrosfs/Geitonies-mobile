@@ -1,6 +1,7 @@
 export type Lang = 'el' | 'en';
 export type L10n = { el: string; en: string };
 export type BoardId = 'classic' | 'large';
+export type CityId = 'athens' | 'patras' | 'thessaloniki';
 export type Kind =
   | 'go' | 'street' | 'station' | 'utility' | 'chance' | 'chest'
   | 'tax' | 'jail' | 'parking' | 'gotojail';
@@ -122,6 +123,8 @@ export interface Game {
   boardId: BoardId;
   /** '' = default name (shown in each device's language) */
   names: string[];
+  city?: CityId;
+  nameMap?: number[];
   rules: Rules;
   players: Player[];
   cur: number;
@@ -193,6 +196,10 @@ export interface Setup {
   players: PlayerSetup[];
   boardId: BoardId;
   names: string[];
+  /** which city's neighbourhood names (default Athens) */
+  city?: CityId;
+  /** nameMap[square] = the square whose default name is shown there (names moved between squares) */
+  nameMap?: number[];
   customCards: CustomCard[];
   rules: Rules;
 }

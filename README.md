@@ -32,7 +32,7 @@ It runs entirely in the browser: no app store, no accounts, no backend, no runni
 - **Two boards** — classic (40 squares, 2–6 players) and a large 56-square board for 7–10 players.
 - **3D board** (three.js) — physics-simulated dice, 23 hand-modelled pieces, a small city of buildings around the board, a camera that follows each move, animated coins for every payment, a jail cage with sirens. A 2D board is available for older phones.
 - **Online play, peer-to-peer** — one phone hosts, the others join with a 5-letter code or a QR code. Chat, presence, automatic moves for absent players, reconnection, and host take-over if the host disappears.
-- **Customisable** — rename neighbourhoods, write your own cards, pick colours, pieces and photos, choose house rules.
+- **Customisable** — three city name sets (Athens, Patras, Thessaloniki), move any neighbourhood to another colour group, rename squares, write your own cards, pick colours, pieces and photos, choose house rules.
 - **Installable PWA** — works offline for one-phone games, updates itself.
 - **Built-in rules** — short, expandable sections; inside a game they start with that game's own settings.
 - **Greek and English** interface; end-of-game statistics and one-tap rematch.
@@ -58,8 +58,8 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 Every push to `main` runs **lint → unit tests → build → browser tests → deploy**; nothing is published unless everything passes.
 
-- **71 unit tests (Vitest)** — targeted rule tests, 60 fully simulated random games checking invariants, 3,000 simulated dice throws (always flat, inside the board, showing the rolled value), every 3D piece, translation coverage (every message exists in Greek and English), and the in-app rules (every amount filled in from the board).
-- **11 end-to-end tests (Playwright)** — real browser play on the 3D and 2D boards, menus, rules, jail, language switch, end of game and rematch, and two-phone online tests: chat, sync, the host losing the internet, and a phone stuck on an outdated screen recovering by itself.
+- **75 unit tests (Vitest)** — targeted rule tests, 60 fully simulated random games checking invariants, 3,000 simulated dice throws (always flat, inside the board, showing the rolled value), every 3D piece, translation coverage (every message exists in Greek and English), and the in-app rules (every amount filled in from the board).
+- **12 end-to-end tests (Playwright)** — real browser play on the 3D and 2D boards, menus, rules, city names, jail, language switch, end of game and rematch, and two-phone online tests: chat, sync, the host losing the internet, and a phone stuck on an outdated screen recovering by itself.
 
 ## Tech stack
 
@@ -96,7 +96,6 @@ see the [changelog](CHANGELOG.md).
 ## Roadmap
 
 - Computer opponents (bots) for solo play and to replace players who leave
-- Theme packs with other cities
 - Own TURN server option for networks that block peer-to-peer connections
 
 ## License

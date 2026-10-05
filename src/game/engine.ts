@@ -1,5 +1,6 @@
 import { BOARDS, isOwnable } from './boards';
 import { buildCards } from './cards';
+import { defaultName, validNameMap } from './cities';
 import type {
   Action, Board, Card, Game, Offer, Owed, Pending, Player, PlayerStats, Setup, Stats, Trade,
 } from './types';
@@ -156,6 +157,8 @@ export function newGame(setup: Setup, seed: number, now: number): Game {
     v: 0,
     boardId: setup.boardId,
     names: b.squares.map((_, i) => setup.names[i] ?? ''),
+    city: setup.city ?? 'athens',
+    nameMap: validNameMap(setup.boardId, setup.nameMap),
     rules: setup.rules,
     players: setup.players.map((p) => ({
       ...p, cash: b.startCash, pos: 0, jail: false, jailTries: 0, jailCards: [], out: false, lapped: false,
@@ -835,5 +838,5 @@ export function autoAction(g: Game, id: string): Action | null {
 
 /** display name of a square for a language */
 export function sqName(g: Game, sq: number, lang: 'el' | 'en'): string {
-  return g.names[sq] || board(g).squares[sq].name[lang];
+  return g.names[sq] || defaultName(g.boardId, g.city, g.nameMap, sq, lang);
 }

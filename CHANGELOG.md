@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.0
+- City name sets: Athens (default), Patras and Thessaloniki, chosen in Setup → Names; stations follow the city too.
+- Move a neighbourhood to another colour group before the game (tap ⇅ on two squares to swap them), e.g. Glyfada into the blue group.
+- Tests: every city has complete, unique names on both boards; invalid moves (e.g. a station with a street) are rejected.
+
 ## 1.4.0
 - Rules of the game in the app: from the home screen and from the in-game ✕ menu; short sections that open for details, in Greek and English.
 - Inside a game, the rules start with that game's settings (board, amounts, auction type, house rules, time limit, custom cards).

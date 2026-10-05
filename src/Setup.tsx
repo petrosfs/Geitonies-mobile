@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import QRCode from 'qrcode';
 import { store } from './store';
 import { hasWebGL, requestMotion } from './fx';
-import { BOARDS, isOwnable } from './game/boards';
+import { BOARDS } from './game/boards';
+import { CITIES, CITY_IDS, defaultName } from './game/cities';
 import { CUSTOM_EFFECTS, type CustomEffectKind } from './game/cards';
 import type { CustomCard, Deck, Effect, PlayerSetup, Setup } from './game/types';
 import { COLORS, EMOJIS, readPhoto, useStore, useT } from './ui';
@@ -208,27 +209,66 @@ function BoardTab({ setup, set }: { setup: Setup; set: (p: Partial<Setup>) => vo
 }
 
 function NamesTab({ setup, set }: { setup: Setup; set: (p: Partial<Setup>) => void }) {
-  const { t, lang } = useT();
+  const { t, m, lang } = useT();
   const b = BOARDS[setup.boardId];
-  const upd = (i: number, v: string) => {
-    const names = b.squares.map((_, k) => setup.names[k] ?? '');
-    names[i] = v;
-    set({ names });
+  const [picked, setPicked] = useState<number | null>(null);
+  const map = setup.nameMap?.length === b.squares.length ? setup.nameMap : b.squares.map((_, i) => i);
+  const names = b.squares.map((_, k) => setup.names[k] ?? '');
+  const shown = (i: number) => defaultName(setup.boardId, setup.city, map, i, lang);
+  const upd = (i: number, v: string) => { const n = [...names]; n[i] = v; set({ names: n }); };
+  /** first tap picks a square, second tap swaps the two names (same kind of square only) */
+  const tapMove = (i: number) => {
+    if (picked === null || picked === i || b.squares[picked].kind !== b.squares[i].kind) { setPicked(picked === i ? null : i); return; }
+    const nm = [...map];
+    [nm[picked], nm[i]] = [nm[i], nm[picked]];
+    const n = [...names];
+    [n[picked], n[i]] = [n[i], n[picked]];
+    set({ nameMap: nm, names: n });
+    setPicked(null);
   };
+  const row = (i: number, chip: ReactNode, movable = true) => {
+    const sq = b.squares[i];
+    const canTarget = picked !== null && picked !== i && b.squares[picked].kind === sq.kind;
+    return (
+      <div key={i} className={'name-row' + (picked === i ? ' picked' : '') + (canTarget ? ' target' : '')}>
+        {chip}
+        {movable && (
+          <button className="btn small ghost move" aria-label={t('moveName')} onClick={() => tapMove(i)}>⇅</button>
+        )}
+        <input value={names[i]} placeholder={shown(i)} maxLength={32} onChange={(e) => upd(i, e.target.value)} />
+        <span className="small muted price">{m(sq.price!)}</span>
+      </div>
+    );
+  };
+  const stations = b.squares.map((sq, i) => (sq.kind === 'station' ? i : -1)).filter((i) => i >= 0);
+  const utils = b.squares.map((sq, i) => (sq.kind === 'utility' ? i : -1)).filter((i) => i >= 0);
   return (
     <div>
-      <p className="muted">{t('namesHelp')}</p>
-      <div className="names">
-        {b.squares.map((sq, i) => isOwnable(sq) && (
-          <label key={i} className="name-row">
-            <span className="chip" style={{ background: sq.group !== undefined ? b.groups[sq.group].color : 'var(--ink-soft)' }}>
-              {sq.kind === 'station' ? '🚆' : sq.kind === 'utility' ? '💡' : ''}
-            </span>
-            <input value={setup.names[i] ?? ''} placeholder={sq.name[lang]} maxLength={32} onChange={(e) => upd(i, e.target.value)} />
-          </label>
-        ))}
+      <div className="field">
+        <span>{t('city')}</span>
+        <div className="seg">
+          {CITY_IDS.map((c) => (
+            <button key={c} className={(setup.city ?? 'athens') === c ? 'on' : ''}
+              onClick={() => { setPicked(null); set({ city: c, nameMap: undefined, names: [] }); }}>
+              {CITIES[c].name[lang]}
+            </button>
+          ))}
+        </div>
       </div>
-      <button className="btn ghost" onClick={() => set({ names: [] })}>{t('resetNames')}</button>
+      <p className="muted small">{picked === null ? t('moveHelp') : t('movePicked', { n: shown(picked) })}</p>
+      {b.groups.map((grp, g) => (
+        <div key={g} className="name-group" style={{ borderLeftColor: grp.color }}>
+          {grp.members.map((i) => row(i, <span className="chip" style={{ background: grp.color }} />))}
+        </div>
+      ))}
+      <div className="name-group" style={{ borderLeftColor: 'var(--ink-soft)' }}>
+        {stations.map((i) => row(i, <span className="chip">🚆</span>))}
+      </div>
+      <div className="name-group" style={{ borderLeftColor: 'var(--ink-soft)' }}>
+        {utils.map((i) => row(i, <span className="chip">💡</span>, false))}
+      </div>
+      <p className="muted small">{t('namesHelp')}</p>
+      <button className="btn ghost" onClick={() => { setPicked(null); set({ names: [], nameMap: undefined }); }}>{t('resetNames')}</button>
     </div>
   );
 }
