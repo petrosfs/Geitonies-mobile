@@ -62,6 +62,8 @@ export interface Rules {
   /** 0 = off */
   timeLimitMin: number;
   autoMoveSec: number;
+  /** starting money for every player (default: the board's) */
+  startCash?: number;
 }
 
 export interface Player {
@@ -183,6 +185,8 @@ export type Action =
   | { t: 'counter'; trade: Trade }
   | { t: 'cancelTrade' }
   | { t: 'kick'; id: string }
+  /** host only: a new player joins a game that has already started */
+  | { t: 'addPlayer'; player: PlayerSetup }
   | { t: 'tick' };
 
 export interface PlayerSetup {

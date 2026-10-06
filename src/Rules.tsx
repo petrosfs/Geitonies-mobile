@@ -1,4 +1,5 @@
 import { BOARDS } from './game/boards';
+import { startCashOf } from './game/engine';
 import type { Game } from './game/types';
 import { fill, RULES, ruleValues } from './rules';
 import { Modal } from './components';
@@ -9,6 +10,7 @@ export function RulesSheet({ g, onClose }: { g?: Game | null; onClose: () => voi
   const { t, m, lang } = useT();
   const b = BOARDS[g?.boardId ?? 'classic'];
   const v = ruleValues(b, m);
+  if (g) v.start = m(startCashOf(g.rules, b.startCash));
   const r = g?.rules;
   const customCards = g ? Math.max(0, g.cards.length - 32) : 0;
   const onOff = (on: boolean) => (on ? '✅' : '—');
@@ -20,6 +22,7 @@ export function RulesSheet({ g, onClose }: { g?: Game | null; onClose: () => voi
           <h3>{t('rulesThisGame')}</h3>
           <ul>
             <li>{t(g.boardId)}: {t(g.boardId + 'Info')}</li>
+            <li>{t('rulesStartCash', { n: m(startCashOf(r, b.startCash)) })}</li>
             <li>{t('rulesSalaryFine', { s: v.salary, f: v.fine })}</li>
             <li>{t('auctionMode')}: {t(r.auction === 'open' ? 'auctionOpen' : 'auctionSealed')}</li>
             <li>{t('timeLimit')}: {r.timeLimitMin ? t('minutes', { n: r.timeLimitMin }) : t('off')}</li>

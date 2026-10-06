@@ -480,4 +480,16 @@ describe('game flow', () => {
     g = act(g, 'p0', { t: 'unmortgage', sq: 3 });
     expect(g.players[0].cash).toBe(1250 - 275);
   });
+
+  it('a player can join a game in progress (host only), with the starting money, playing last', () => {
+    let g = mk(2, { startCash: 1000 });
+    expect(g.players.map((p) => p.cash)).toEqual([1000, 1000]);
+    const np = { id: 'p9', name: 'Νέος', color: '#123456', emoji: '🎩', device: 'd9' };
+    expectRule(() => act(g, 'p0', { t: 'addPlayer', player: np }), 'notNow');
+    g = act(g, 'host', { t: 'addPlayer', player: np });
+    expect(g.players.length).toBe(3);
+    expect(g.players[2]).toMatchObject({ id: 'p9', cash: 1000, pos: 0, out: false });
+    expect(g.cur).toBe(0);
+    expectRule(() => act(g, 'host', { t: 'addPlayer', player: np }), 'notNow'); // same id twice
+  });
 });

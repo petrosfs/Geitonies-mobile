@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Board3D } from './Board3D';
 import { RulesSheet } from './Rules';
+import { ReportSheet } from './Report';
 import { buzz, hasWebGL, kaching, listenShake, requestMotion, siren, unlockAudio } from './fx';
 import { CHAT_MAX, store, TAKEOVER_MS } from './store';
 import {
   bankStock, board, curP, hasMonopoly, netWorth, ownedBy, priceOf, rentFor, sqName, unmortgageCost, waiting,
 } from './game/engine';
-import type { Game, Offer, Pending, Player, Trade } from './game/types';
+import type { Game, Offer, Pending, Player, Trade, PlayerSetup } from './game/types';
 import { BoardView, Die } from './Board';
 import { APP_VERSION_TEXT, cardText, groupColor, logText, playerName, useStore, useT } from './ui';
 import { Avatar, Modal, PieceIcon } from './components';
@@ -35,6 +36,7 @@ export function GameScreen() {
   const [busy, setBusy] = useState(false);
   const [menu, setMenu] = useState(false);
   const [showRules, setShowRules] = useState(false);
+  const [showReport, setShowReport] = useState(false);
   const use3d = useMemo(() => s.fx.gfx === '3d' && hasWebGL(), [s.fx.gfx]);
 
   const local = g.players.filter((p) => p.device === s.device && !p.out);
@@ -63,20 +65,33 @@ export function GameScreen() {
     const fresh = Math.min(Math.max(0, seq - seqRef.current), g.log.length);
     seqRef.current = seq;
     const recent = g.log.slice(g.log.length - fresh);
+    // a piece is about to move on the 3D board: hold the shown money until it gets there
+    if (use3d && recent.some((e) => e.k === 'moved' || e.k === 'rolled')) setCalm(() => false);
     const names = recent.filter((e) => e.k === 'jailed').map((e) => playerName(g, String(e.a?.p)));
     if (names.length) { setCalm(() => false); setJailQueue((q) => [...q, ...names]); }
     const rents = recent.filter((e) => e.k === 'rent' && Number(e.a?.n) > 0)
       .map((e) => ({ p: String(e.a?.p), o: String(e.a?.o), n: Number(e.a?.n), sq: Number(e.a?.sq) }));
     if (rents.length) { setCalm(() => false); setRentQueue((q) => [...q, ...rents]); }
-  }, [g]);
+  }, [g, use3d]);
+  // which roll the 3D board has finished showing: money and banners wait for the piece to arrive
+  const rollsNow = g.rolls ?? 0;
+  const [seenRolls, setSeenRolls] = useState(rollsNow);
+  const rollsRef = useRef(rollsNow);
+  useEffect(() => { rollsRef.current = rollsNow; }, [rollsNow]);
+  const pendingMove = use3d && rollsNow !== seenRolls;
+  useEffect(() => {
+    if (!pendingMove) return;
+    const id = window.setTimeout(() => setSeenRolls(rollsNow), 12000); // safety: never hold the money for ever
+    return () => clearTimeout(id);
+  }, [pendingMove, rollsNow]);
   // wait until the scene has been calm for a moment (the 3D animation starts one frame after the state changes)
   useEffect(() => {
     if (busy) return; // (calm was cleared when the animation started, in onBusy)
     const id = window.setTimeout(() => setCalm(true), use3d ? 350 : 0);
     return () => clearTimeout(id);
   }, [busy, use3d, g.v]);
-  const jailNow = calm && !busy ? jailQueue[0] : undefined;
-  const rentNow = calm && !busy && !jailNow ? rentQueue[0] : undefined;
+  const jailNow = calm && !busy && !pendingMove ? jailQueue[0] : undefined;
+  const rentNow = calm && !busy && !pendingMove && !jailNow ? rentQueue[0] : undefined;
   useEffect(() => {
     if (!rentNow) return;
     if (s.fx.sound) kaching();
@@ -91,6 +106,12 @@ export function GameScreen() {
     return () => clearTimeout(id);
   }, [jailNow, jailQueue.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // the money shown in the top bar changes when the piece arrives, not when the dice are thrown
+  const liveCash = useMemo(() => Object.fromEntries(g.players.map((p) => [p.id, p.cash])), [g]);
+  const [shownCash, setShownCash] = useState(liveCash);
+  if (calm && !busy && !pendingMove && shownCash !== liveCash) setShownCash(liveCash); // catch up once the piece has arrived
+  const cashOf = (p: Player) => shownCash[p.id] ?? p.cash;
+
   // money going in and out: "+200 €" / "−50 €" floating by each player's cash
   const prevCash = useRef<Record<string, number>>(Object.fromEntries(g.players.map((p) => [p.id, p.cash])));
   const owedDelta = useRef<Record<string, number>>({});
@@ -104,7 +125,7 @@ export function GameScreen() {
     }
   }, [g]);
   useEffect(() => {
-    if (!calm || busy) return;
+    if (!calm || busy || pendingMove) return;
     const entries = Object.entries(owedDelta.current).filter(([, d]) => d);
     if (!entries.length) return;
     owedDelta.current = {};
@@ -116,7 +137,7 @@ export function GameScreen() {
     setFloats((f) => [...f, ...add]);
     const tid = window.setTimeout(() => setFloats((f) => f.filter((x) => !add.includes(x))), 1900);
     return () => clearTimeout(tid);
-  }, [calm, busy, g.v]);
+  }, [calm, busy, pendingMove, g.v]);
 
   // roll by shaking the phone
   const canRoll = !!actor && !busy && !needHandoff && !head && !g.trade && cur.id === actor && (!g.rolled || g.again) && sheet === 'none';
@@ -158,7 +179,7 @@ export function GameScreen() {
         <div className="cashes">
           {g.players.filter((p) => !p.out).map((p) => (
             <span key={p.id} ref={(el) => { chipRefs.current[p.id] = el; }} className={'cashchip' + (p.id === cur.id ? ' cur' : '')} style={{ ['--c' as string]: p.color }}>
-              <PieceIcon id={p.emoji} color={p.color} size={20} /> {m(p.cash)}
+              <PieceIcon id={p.emoji} color={p.color} size={20} /> {m(cashOf(p))}
               {s.mode !== 'local' && s.presence[p.device] === false && <span className="offdot" title={t('offline')} />}
             </span>
           ))}
@@ -171,6 +192,7 @@ export function GameScreen() {
         </span>
       ))}
 
+      <VersionWarning />
       {s.mode === 'client' && s.net === 'lost' && <HostLost />}
       {s.mode === 'client' && (s.net === 'connecting' || s.net === 'error') && (
         <div className="banner warn">
@@ -180,7 +202,7 @@ export function GameScreen() {
       )}
 
       {use3d ? (
-        <Board3D g={g} onSquare={setInfo} onBusy={(b) => { setBusy(b); if (b) setCalm(false); }} overlay={
+        <Board3D g={g} onSquare={setInfo} onBusy={(b) => { setBusy(b); if (b) setCalm(false); else setSeenRolls(rollsRef.current); }} overlay={
           <div className="b3-overlay">
             <div className="turnline" style={{ color: cur.color }}>
               <Avatar color={cur.color} emoji={cur.emoji} photo={s.photos[cur.id]} size={24} />
@@ -281,6 +303,7 @@ export function GameScreen() {
           <button className="btn primary wide" onClick={() => setMenu(false)}>{t('continueGame')}</button>
           <button className="btn wide" onClick={() => { setMenu(false); setShowRules(true); }}>📖 {t('rules')}</button>
           <LightPicker />
+          <button className="btn wide ghost" onClick={() => { setMenu(false); setShowReport(true); }}>🛠️ {t('report')}</button>
           {s.mode !== 'local' && (
             <button className="btn wide" onClick={() => { store.reconnect(); setMenu(false); }}>🔄 {t('reconnect')}</button>
           )}
@@ -295,7 +318,9 @@ export function GameScreen() {
           <p className="app-version">{APP_VERSION_TEXT}</p>
         </Modal>
       )}
+      {s.mode === 'host' && s.lateReqs[0] && <LateRequest g={g} req={s.lateReqs[0]} />}
       {showRules && <RulesSheet g={g} onClose={() => setShowRules(false)} />}
+      {showReport && <ReportSheet onClose={() => setShowReport(false)} />}
       {info !== null && <SquareInfo g={g} sq={info} onClose={() => setInfo(null)} />}
       {g.over && !busy && <GameOver g={g} />}
     </div>
@@ -714,6 +739,48 @@ function TradeResponse({ g, tr, onCounter }: { g: Game; tr: Trade; onCounter: ()
   );
 }
 
+// ---------------- someone asks to join the game in progress (host) ----------------
+
+function LateRequest({ g, req }: { g: Game; req: { device: string; player: PlayerSetup; photo?: string } }) {
+  const { t } = useT();
+  const full = g.players.filter((p) => !p.out).length >= 10;
+  return (
+    <Modal>
+      <h2>🙋 {t('lateReqTitle', { p: req.player.name })}</h2>
+      <div className="handoff">
+        <Avatar color={req.player.color} emoji={req.player.emoji} photo={req.photo} size={72} />
+      </div>
+      <p className="small muted center">{t('lateReqHelp')}</p>
+      <button className="btn primary wide" disabled={full} onClick={() => store.answerLate(req.device, 'player')}>🎲 {t('lateAsPlayer')}</button>
+      {full && <p className="small muted center">{t('e_tooMany')}</p>}
+      <button className="btn wide" onClick={() => store.answerLate(req.device, 'spectator')}>👁️ {t('lateAsSpectator')}</button>
+      <button className="btn ghost wide" onClick={() => store.answerLate(req.device, 'no')}>{t('lateRefuse')}</button>
+    </Modal>
+  );
+}
+
+// ---------------- everyone must run the same version ----------------
+
+/** online: warn when a phone runs a different (older) version of the app */
+export function VersionWarning() {
+  const { t } = useT();
+  const s = useStore();
+  if (s.mode === 'host') {
+    const players = s.game?.players ?? s.setup.players;
+    const stale = Object.entries(s.versions).filter(([d, v]) => v !== __APP_VERSION__ && d !== s.device);
+    if (!stale.length) return null;
+    const names = stale.map(([d, v]) => {
+      const who = players.filter((p) => p.device === d).map((p) => p.name).join(', ') || (s.spectators[d] ? '👁️ ' + s.spectators[d] : '?');
+      return `${who} (${v === 'old' ? t('verOld') : 'v' + v})`;
+    });
+    return <div className="banner warn">⚠️ {t('verOthers', { p: names.join(' · '), v: __APP_VERSION__ })}</div>;
+  }
+  if (s.mode === 'client' && s.hostVersion && s.hostVersion !== __APP_VERSION__) {
+    return <div className="banner warn">⚠️ {t('verHost', { h: s.hostVersion === 'old' ? t('verOld') : 'v' + s.hostVersion, v: __APP_VERSION__ })}</div>;
+  }
+  return null;
+}
+
 // ---------------- board brightness ----------------
 
 export function LightPicker() {
@@ -738,7 +805,8 @@ function ChatSheet({ g, local, viewer, onClose }: { g: Game; local: Player[]; vi
   const s = useStore();
   const { t } = useT();
   const [text, setText] = useState('');
-  const [as, setAs] = useState(viewer ?? local[0]?.id ?? '');
+  // spectators write under their name (the host checks it)
+  const [as, setAs] = useState(viewer ?? local[0]?.id ?? (s.spectatorName ? '~' + s.spectatorName : ''));
   const listRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     store.markChatSeen();
@@ -754,12 +822,13 @@ function ChatSheet({ g, local, viewer, onClose }: { g: Game; local: Player[]; vi
         {s.chat.length === 0 && <p className="muted">{t('chatEmpty')}</p>}
         {s.chat.map((c) => {
           const p = g.players.find((x) => x.id === c.from);
-          const mine = !!local.find((x) => x.id === c.from);
+          const watcher = c.from.startsWith('~') ? c.from.slice(1) : null;
+          const mine = !!local.find((x) => x.id === c.from) || (!!watcher && watcher === s.spectatorName && local.length === 0);
           return (
             <div key={c.id} className={'chatmsg' + (mine ? ' mine' : '')}>
               {p && <Avatar color={p.color} emoji={p.emoji} photo={s.photos[p.id]} size={26} />}
               <div className="bubble" style={{ borderColor: p?.color }}>
-                <div className="small"><strong style={{ color: p?.color }}>{p?.name ?? '?'}</strong> <span className="muted">{time(c.t)}</span></div>
+                <div className="small"><strong style={{ color: p?.color }}>{p?.name ?? (watcher ? `👁️ ${watcher}` : '?')}</strong> <span className="muted">{time(c.t)}</span></div>
                 <div className="chattext">{c.text}</div>
               </div>
             </div>

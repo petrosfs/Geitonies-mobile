@@ -144,6 +144,7 @@ const el: RuleSection[] = [
       'Αν κάποιος αποσυνδεθεί, μετά από λίγο παίζει αυτόματα, και ο οικοδεσπότης μπορεί να τον αφαιρέσει.',
       'Αν χαθεί ο οικοδεσπότης, η παρτίδα περιμένει. Μετά από 5 λεπτά οποιοσδήποτε μπορεί να πατήσει «Ανάληψη οικοδεσπότη».',
       'Αν η οθόνη σου δεν ενημερώνεται, πάτα «🔄 Επανασύνδεση» στο μενού ✕.',
+      'Κάποιος μπορεί να μπει και σε παρτίδα που έχει ξεκινήσει: ζητά να μπει, και ο οικοδεσπότης τον βάζει ως παίκτη (ξεκινά από την Αφετηρία με τα αρχικά χρήματα) ή ως θεατή.',
     ],
   },
 ];
@@ -275,6 +276,7 @@ const en: RuleSection[] = [
       'If someone disconnects, their turns are played automatically after a while, and the host can remove them.',
       'If the host is lost, the game waits. After 5 minutes anyone can tap “Take over as host”.',
       'If your screen doesn’t update, tap “🔄 Reconnect” in the ✕ menu.',
+      'Someone can also join a game that has started: they ask, and the host lets them in as a player (starting on Start with the starting money) or as a spectator.',
     ],
   },
 ];

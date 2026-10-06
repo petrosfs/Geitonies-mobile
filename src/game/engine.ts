@@ -166,6 +166,13 @@ function snapshot(g: Game) {
 
 // ---------- setup ----------
 
+/** starting money: the setup's choice (50 € steps, 100–20 000 €) or the board's */
+export function startCashOf(rules: { startCash?: number }, boardDefault: number): number {
+  const v = Number(rules.startCash);
+  if (!Number.isFinite(v) || v <= 0) return boardDefault;
+  return Math.min(20000, Math.max(100, Math.round(v / 50) * 50));
+}
+
 export function newGame(setup: Setup, seed: number, now: number): Game {
   const b = BOARDS[setup.boardId];
   const props: Game['props'] = {};
@@ -181,7 +188,7 @@ export function newGame(setup: Setup, seed: number, now: number): Game {
     prices: validPrices(b, setup.prices),
     rules: setup.rules,
     players: setup.players.map((p) => ({
-      ...p, cash: b.startCash, pos: 0, jail: false, jailTries: 0, jailCards: [], out: false, lapped: false,
+      ...p, cash: startCashOf(setup.rules, b.startCash), pos: 0, jail: false, jailTries: 0, jailCards: [], out: false, lapped: false,
     })),
     cur: 0, startIdx: 0, rolled: false, again: false, doubles: 0, dice: null,
     props, cards,
@@ -817,6 +824,19 @@ export function apply(prev: Game, by: string, a: Action, now: number): Game {
     case 'cancelTrade': {
       if (!g.trade || g.trade.from !== by) fail('notNow');
       g.trade = null;
+      break;
+    }
+    case 'addPlayer': {
+      if (by !== 'host') fail('notNow');
+      const np = a.player;
+      if (!np || !np.id || g.players.some((x) => x.id === np.id)) fail('notNow');
+      if (g.players.filter((x) => !x.out).length >= 10) fail('tooMany');
+      const b = board(g);
+      g.players.push({
+        id: np.id, name: String(np.name).trim().slice(0, 24) || '?', color: np.color, emoji: np.emoji, device: np.device,
+        cash: startCashOf(g.rules, b.startCash), pos: 0, jail: false, jailTries: 0, jailCards: [], out: false, lapped: false,
+      });
+      log(g, 'joined', { p: np.id });
       break;
     }
     case 'kick': {

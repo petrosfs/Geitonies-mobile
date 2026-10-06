@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import { store } from './store';
 import { hasWebGL, requestMotion } from './fx';
 import { BOARDS } from './game/boards';
+import { startCashOf } from './game/engine';
 import { CITIES, CITY_IDS, defaultName } from './game/cities';
 import { CUSTOM_EFFECTS, type CustomEffectKind } from './game/cards';
 import type { CustomCard, Deck, Effect, PlayerSetup, Setup } from './game/types';
@@ -10,7 +11,7 @@ import { canUseCamera, COLORS, EMOJIS, readPhoto, useStore, useT } from './ui';
 import { Avatar, PieceIcon } from './components';
 import { CameraSheet } from './Camera';
 import { pieceText } from './three/pieces';
-import { LightPicker } from './Game';
+import { LightPicker, VersionWarning } from './Game';
 
 const newId = () => Math.random().toString(36).slice(2, 10);
 
@@ -219,6 +220,7 @@ export function SetupScreen() {
         <strong>{s.mode === 'host' ? t('hostOnline') : t('newLocal')}</strong>
       </header>
       {s.mode === 'host' && <SharePanel room={s.room} />}
+      {s.mode === 'host' && <VersionWarning />}
       <nav className="tabs">
         {(['players', 'board', 'names', 'cards', 'rules'] as Tab[]).map((k) => (
           <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>
@@ -458,7 +460,7 @@ function CardsTab({ setup, set }: { setup: Setup; set: (p: Partial<Setup>) => vo
 }
 
 function RulesTab({ setup, set, online }: { setup: Setup; set: (p: Partial<Setup>) => void; online: boolean }) {
-  const { t } = useT();
+  const { t, m } = useT();
   const r = setup.rules;
   const rules = (patch: Partial<Setup['rules']>) => set({ rules: { ...r, ...patch } });
   return (
@@ -477,6 +479,14 @@ function RulesTab({ setup, set, online }: { setup: Setup; set: (p: Partial<Setup
           {t('r_' + k)}
         </label>
       ))}
+      <h3>{t('startCash')}</h3>
+      <div className="row start-cash">
+        <input type="number" inputMode="numeric" min={100} max={20000} step={50}
+          value={r.startCash ?? ''} placeholder={String(BOARDS[setup.boardId].startCash)}
+          onChange={(e) => rules({ startCash: e.target.value === '' ? undefined : Number(e.target.value) })}
+          onBlur={() => { if (r.startCash !== undefined) rules({ startCash: startCashOf(r, BOARDS[setup.boardId].startCash) }); }} />
+        <span className="muted small">€ · {t('startCashHint', { n: m(BOARDS[setup.boardId].startCash) })}</span>
+      </div>
       <h3>{t('timeLimit')}</h3>
       <select value={r.timeLimitMin} onChange={(e) => rules({ timeLimitMin: Number(e.target.value) })}>
         {[0, 30, 45, 60, 90, 120, 180].map((n) => <option key={n} value={n}>{n ? t('minutes', { n }) : t('off')}</option>)}
@@ -534,27 +544,90 @@ export function LobbyScreen() {
   const [draft, setDraft] = useState<PlayerSetup[]>(mine);
   const [photos, setPhotos] = useState<Record<string, string>>(() => Object.fromEntries(mine.filter((p) => s.photos[p.id]).map((p) => [p.id, s.photos[p.id]])));
   const [sent, setSent] = useState(mine.length > 0);
+  const [tab, setTab] = useState<Tab>('players');
   const valid = draft.length > 0 && draft.every((p) => p.name.trim());
+  const noop = () => { /* guests can look, not change */ };
   return (
-    <div className="screen">
+    <div className="screen setup">
+      <header className="bar">
+        <button className="btn ghost" onClick={() => store.goHome()}>← {t('back')}</button>
+        <strong>{t('roomCode')}: {s.room}</strong>
+      </header>
+      <VersionWarning />
+      <nav className="tabs">
+        {(['players', 'board', 'names', 'cards', 'rules'] as Tab[]).map((k) => (
+          <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>
+            {t('setup' + k[0].toUpperCase() + k.slice(1))}
+          </button>
+        ))}
+      </nav>
+      <main className="pane">
+        {tab === 'players' ? (
+          <>
+            <h3>{t('yourPlayers')}</h3>
+            <PlayersEditor players={draft} photos={photos} others={others} onChange={(p, ph) => { setDraft(p); setPhotos(ph); setSent(false); }} />
+            <button className="btn primary wide" disabled={!valid || sent} onClick={() => { store.sendMyPlayers(draft, photos); setSent(true); }}>
+              {t('save')}
+            </button>
+            <h3>{t('players')}</h3>
+            <ul className="plist">
+              {others.map((p) => (
+                <li key={p.id}><Avatar color={p.color} emoji={p.emoji} photo={s.photos[p.id]} size={28} /> {p.name}</li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <>
+            <p className="readonly-note">🔒 {t('hostOnlyChanges')}</p>
+            {/* the host's settings, shown but locked */}
+            <fieldset className="readonly" disabled>
+              {tab === 'board' && <BoardTab setup={s.setup} set={noop} />}
+              {tab === 'names' && <NamesTab setup={s.setup} set={noop} />}
+              {tab === 'cards' && <CardsTab setup={s.setup} set={noop} />}
+              {tab === 'rules' && <RulesTab setup={s.setup} set={noop} online />}
+            </fieldset>
+          </>
+        )}
+        {(tab === 'players' || tab === 'rules') && <DeviceSettings />}
+        <p className="muted center">{t('waitingHost')}</p>
+      </main>
+    </div>
+  );
+}
+
+/** the game had already started: fill in a player and ask the host to come in */
+export function LateJoinScreen() {
+  const { t } = useT();
+  const s = useStore();
+  const [draft, setDraft] = useState<PlayerSetup[]>([]);
+  const [photos, setPhotos] = useState<Record<string, string>>({});
+  const [asked, setAsked] = useState(false);
+  const me = draft[0];
+  return (
+    <div className="screen setup">
       <header className="bar">
         <button className="btn ghost" onClick={() => store.goHome()}>← {t('back')}</button>
         <strong>{t('roomCode')}: {s.room}</strong>
       </header>
       <main className="pane">
-        <h3>{t('yourPlayers')}</h3>
-        <PlayersEditor players={draft} photos={photos} others={others} onChange={(p, ph) => { setDraft(p); setPhotos(ph); setSent(false); }} />
-        <button className="btn primary wide" disabled={!valid || sent} onClick={() => { store.sendMyPlayers(draft, photos); setSent(true); }}>
-          {t('save')}
-        </button>
+        <div className="readonly-note">⏱️ {t('lateHelp')}</div>
+        {asked ? (
+          <div className="join-progress" role="status">
+            <div className="spinner" aria-hidden />
+            <div><strong>{t('lateWaiting')}</strong><p className="small muted">{t('lateWaitingHelp')}</p></div>
+          </div>
+        ) : (
+          <>
+            <PlayersEditor players={draft.slice(0, 1)} photos={photos} others={s.lateOthers}
+              onChange={(p, ph) => { setDraft(p.slice(0, 1)); setPhotos(ph); }} />
+            <button className="btn primary wide" disabled={!me || !me.name.trim()}
+              onClick={() => { store.askLate(me, photos[me.id]); setAsked(true); }}>🙋 {t('lateAsk')}</button>
+          </>
+        )}
         <h3>{t('players')}</h3>
         <ul className="plist">
-          {others.map((p) => (
-            <li key={p.id}><Avatar color={p.color} emoji={p.emoji} photo={s.photos[p.id]} size={28} /> {p.name}</li>
-          ))}
+          {s.lateOthers.map((p) => <li key={p.id}><Avatar color={p.color} emoji={p.emoji} size={28} /> {p.name}</li>)}
         </ul>
-        <DeviceSettings />
-        <p className="muted center">{t('waitingHost')}</p>
       </main>
     </div>
   );

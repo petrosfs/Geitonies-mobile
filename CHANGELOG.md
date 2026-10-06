@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.9.0
+- Join an online game that has already started: the newcomer asks, the host lets them in as a player (starting money, on Start, playing last) or as a spectator (watches and chats), or says no.
+- Guests in the lobby can see the host's settings (board, names & prices, cards, rules), locked.
+- Starting money can be set in the setup (rules tab).
+- Money in the top bar (and the +/− amounts, rent and jail banners) changes when the piece arrives, not when the dice are thrown.
+- A little more contrast on the board (darker text and lines, lighter paper).
+- Fix (online, from 1.8.1): long games stopped updating the other phones (messages over 16 KB were refused); now split and joined. Every phone also tells the host its app version, and a warning appears if someone runs an older one.
+
+## 1.8.1
+- **Fix (online):** in longer games the game state grew past 16 KB, which the data channel silently refused; other phones stopped getting updates (e.g. stuck in an old auction round, “bid must be higher”) while chat still worked. Big messages are now split into parts and joined again; player photos were affected too. Regression test: a game state over 20 KB reaches the other phone.
+- “Report a problem” in the ✕ menu: a short network diary to copy and send.
+
 ## 1.8.0
 - Player photo straight from the camera, inside the app (front/back camera, round preview of what is kept); “From file” for the gallery. Falls back to the phone's camera app if live camera access isn't available.
 - Repository: issue forms for bugs and ideas, security note.

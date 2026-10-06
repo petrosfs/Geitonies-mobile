@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { store } from './store';
 import { Die } from './Board';
 import { GameScreen } from './Game';
-import { JoinScreen, LobbyScreen, SetupScreen } from './Setup';
+import { JoinScreen, LateJoinScreen, LobbyScreen, SetupScreen } from './Setup';
 import { APP_VERSION_TEXT, useStore, useT } from './ui';
 import { Modal } from './components';
 import { RulesSheet } from './Rules';
@@ -59,6 +59,7 @@ export default function App() {
   } else if (s.screen === 'setup') screen = <SetupScreen />;
   else if (s.screen === 'join') screen = <JoinScreen />;
   else if (s.screen === 'lobby') screen = <LobbyScreen />;
+  else if (s.screen === 'latejoin') screen = <LateJoinScreen />;
   else if (s.screen === 'game' && s.game) screen = <GameScreen key={s.room + s.game.boardId + (s.game.gid ?? '')} />;
   else screen = <Home />;
 

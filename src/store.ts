@@ -1,11 +1,13 @@
 import Peer, { type DataConnection } from 'peerjs';
+import { receiveFramed, sendFramed } from './net/frame';
+import { netlog } from './net/netlog';
 import { loadIceServers, peerOptions } from './netconfig';
 import { apply, autoAction, newGame, RuleError, waiting } from './game/engine';
 import { BOARDS } from './game/boards';
 import type { Action, Game, Lang, PlayerSetup, Setup } from './game/types';
 
 export type Mode = 'local' | 'host' | 'client';
-export type Screen = 'home' | 'setup' | 'join' | 'lobby' | 'game';
+export type Screen = 'home' | 'setup' | 'join' | 'lobby' | 'game' | 'latejoin';
 export type Net = 'idle' | 'connecting' | 'ok' | 'lost' | 'error';
 
 /** settings of this device only */
@@ -38,6 +40,18 @@ export interface State {
   /** chat between phones (online games) */
   chat: ChatMsg[];
   chatSeen: number;
+  /** host: app version of each connected device ("old" = before 1.9, which can't keep up in long games) */
+  versions: Record<string, string>;
+  /** guest: the host's app version */
+  hostVersion: string;
+  /** host: people asking to join a game in progress */
+  lateReqs: { device: string; player: PlayerSetup; photo?: string }[];
+  /** host: devices watching the game; each has a name for the chat */
+  spectators: Record<string, string>;
+  /** guest: the game had already started; the players in it (to pick a different colour/piece) */
+  lateOthers: PlayerSetup[];
+  /** guest watching the game (not a player): the name shown in the chat */
+  spectatorName: string;
   /** while joining a new game: keep trying until this time (ms), so a host who stepped out can come back */
   joinUntil: number;
   joinStarted: number;
@@ -47,16 +61,19 @@ export interface State {
 }
 
 type Msg =
-  | { type: 'hello'; device: string }
+  | { type: 'hello'; device: string; ver?: string }
   | { type: 'join'; players: PlayerSetup[] }
   | { type: 'act'; by: string; action: Action }
-  | { type: 'lobby'; setup: Setup; photos: Record<string, string>; hostDevice: string }
-  | { type: 'state'; game: Game; presence: Record<string, boolean>; hostDevice: string }
+  | { type: 'lobby'; setup: Setup; photos: Record<string, string>; hostDevice: string; hostVer?: string }
+  | { type: 'state'; game: Game; presence: Record<string, boolean>; hostDevice: string; hostVer?: string }
   | { type: 'photos'; photos: Record<string, string> }
   | { type: 'err'; key: string }
   | { type: 'kicked' }
   | { type: 'ping'; v?: number; gid?: string }
   | { type: 'sync' }
+  | { type: 'late'; players: PlayerSetup[] }
+  | { type: 'latereq'; player: PlayerSetup; photo?: string }
+  | { type: 'latewait' }
   | { type: 'pong' }
   | { type: 'chat'; from: string; text: string }
   | { type: 'chatmsg'; msg: ChatMsg }
@@ -125,7 +142,7 @@ class Store {
   /** tests only: drop this many state broadcasts (to check that phones catch up by themselves) */
   dropStates = 0;
   private allConns(): DataConnection[] { return [...this.conns.values()].flatMap((set) => [...set]); }
-  private sendDevice(device: string, m: Msg) { this.conns.get(device)?.forEach((c) => { if (c.open) c.send(m); }); }
+  private sendDevice(device: string, m: Msg) { this.conns.get(device)?.forEach((c) => sendFramed(c, m)); }
   private lastSeen = new Map<string, number>();       // host: device -> ms
   private offSince = new Map<string, number>();       // host: device -> ms
   private hostConn: DataConnection | null = null;     // client
@@ -146,6 +163,12 @@ class Store {
       ask: null,
       chat: [],
       chatSeen: 0,
+      versions: {},
+      hostVersion: '',
+      lateReqs: [],
+      spectators: {},
+      lateOthers: [],
+      spectatorName: '',
       joinUntil: 0,
       joinStarted: 0,
       joinNotFound: false,
@@ -155,6 +178,7 @@ class Store {
   get = () => this.s;
   subscribe = (fn: () => void) => { this.listeners.add(fn); return () => this.listeners.delete(fn); };
   private set(patch: Partial<State>) {
+    if (patch.net && patch.net !== this.s.net) netlog('net', `${this.s.net} -> ${patch.net}`);
     this.s = { ...this.s, ...patch };
     this.listeners.forEach((l) => l());
   }
@@ -288,9 +312,9 @@ class Store {
     } catch (e) {
       if (e instanceof RuleError) {
         if (from) {
-          from.send({ type: 'err', key: 'e_' + e.message } satisfies Msg);
+          sendFramed(from, { type: 'err', key: 'e_' + e.message } satisfies Msg);
           // the phone was probably looking at an old screen: send it the real state
-          if (this.s.game) from.send(this.stateMsg());
+          if (this.s.game) sendFramed(from, this.stateMsg());
         }
         else if (by !== 'host') this.toast('e_' + e.message);
         return false;
@@ -299,6 +323,32 @@ class Store {
       this.toast('e_notNow');
       return false;
     }
+  }
+
+  // ---------------- joining a game in progress (host) ----------------
+
+  /** the host lets a late arrival in as a player, as a spectator, or not at all */
+  answerLate(device: string, as: 'player' | 'spectator' | 'no') {
+    const req = this.s.lateReqs.find((r) => r.device === device);
+    this.set({ lateReqs: this.s.lateReqs.filter((r) => r.device !== device) });
+    if (!req || !this.s.game) return;
+    if (as === 'no') { this.sendDevice(device, { type: 'err', key: 'lateRefused' }); return; }
+    if (req.photo) this.set({ photos: { ...this.s.photos, [req.player.id]: req.photo } });
+    this.sendDevice(device, { type: 'photos', photos: this.s.photos });
+    this.sendDevice(device, { type: 'chatlog', msgs: this.s.chat.slice(-100) });
+    if (as === 'spectator') {
+      this.set({ spectators: { ...this.s.spectators, [device]: req.player.name.trim() || '?' } });
+      this.sendDevice(device, this.stateMsg());
+      this.persist();
+      return;
+    }
+    this.applyLocal('host', { t: 'addPlayer', player: req.player });
+  }
+
+  /** guest: ask the host to join the game in progress */
+  askLate(player: PlayerSetup, photo?: string) {
+    this.set({ spectatorName: player.name.trim() });
+    this.send({ type: 'latereq', player: { ...player, device: this.s.device }, photo });
   }
 
   // ---------------- chat ----------------
@@ -317,9 +367,10 @@ class Store {
     if (this.s.chat.some((c) => c.id === msg.id)) return;
     const chat = [...this.s.chat, msg].slice(-200);
     this.set({ chat, chatSeen: mine ? chat.length : this.s.chatSeen });
-    if (this.s.mode === 'host') this.allConns().forEach((c) => { if (c.open) c.send({ type: 'chatmsg', msg } satisfies Msg); });
+    if (this.s.mode === 'host') this.allConns().forEach((c) => sendFramed(c, { type: 'chatmsg', msg } satisfies Msg));
     if (!mine) {
-      const name = this.s.game?.players.find((p) => p.id === msg.from)?.name ?? this.s.setup.players.find((p) => p.id === msg.from)?.name ?? '';
+      const name = msg.from.startsWith('~') ? '👁️ ' + msg.from.slice(1)
+        : this.s.game?.players.find((p) => p.id === msg.from)?.name ?? this.s.setup.players.find((p) => p.id === msg.from)?.name ?? '';
       this.toast('#' + (name ? name + ': ' : '') + msg.text);
     }
     this.persist();
@@ -342,7 +393,7 @@ class Store {
       this.updateSetup(setup);
       if (pl && pl.device !== this.s.device && !setup.players.some((p) => p.device === pl.device)) {
         const set = [...(this.conns.get(pl.device) ?? [])];
-        set.forEach((c) => c.send({ type: 'kicked' } satisfies Msg));
+        set.forEach((c) => sendFramed(c, { type: 'kicked' } satisfies Msg));
         window.setTimeout(() => set.forEach((c) => c.close()), 500);
       }
     }
@@ -384,7 +435,7 @@ class Store {
     // ping every few seconds, with the game version so phones that missed an update can ask for it
     if (++this.beat % 3 === 0) {
       const ping: Msg = { type: 'ping', v: this.s.game?.v, gid: this.s.game?.gid };
-      this.allConns().forEach((c) => { if (c.open) c.send(ping); });
+      this.allConns().forEach((c) => sendFramed(c, ping));
     }
     // automatic moves for absent players
     if (!g || g.over) return;
@@ -469,36 +520,50 @@ class Store {
 
   private onHostConn(conn: DataConnection) {
     let device = '';
-    conn.on('data', (raw) => {
+    conn.on('data', receiveFramed<unknown>((raw) => {
       const m = raw as Msg;
       if (device) this.lastSeen.set(device, Date.now());
       switch (m.type) {
         case 'hello': {
           device = m.device;
+          // older apps don't send a version: they can't read split messages, so they would get stuck
+          this.set({ versions: { ...this.s.versions, [device]: m.ver ?? 'old' } });
+          netlog('hello', `${device} v${m.ver ?? 'old'}`);
           if (!this.conns.has(device)) this.conns.set(device, new Set());
           this.conns.get(device)!.add(conn);
           this.lastSeen.set(device, Date.now());
           const g = this.s.game;
           if (g) {
-            if (!g.players.some((p) => p.device === device && !p.out)) {
-              conn.send({ type: 'err', key: 'started' } satisfies Msg);
+            const isPlayer = g.players.some((p) => p.device === device && !p.out);
+            const isSpectator = device in this.s.spectators;
+            if (!isPlayer && !isSpectator) {
+              // the game has started: they may ask to join (the host decides)
+              sendFramed(conn, { type: 'late', players: g.players.filter((p) => !p.out).map(({ id, name, color, emoji, device: d }) => ({ id, name, color, emoji, device: d })) } satisfies Msg);
               return;
             }
-            conn.send({ type: 'photos', photos: this.s.photos } satisfies Msg);
-            conn.send({ type: 'chatlog', msgs: this.s.chat.slice(-100) } satisfies Msg);
+            sendFramed(conn, { type: 'photos', photos: this.s.photos } satisfies Msg);
+            sendFramed(conn, { type: 'chatlog', msgs: this.s.chat.slice(-100) } satisfies Msg);
             this.hostHeartbeat();
-            conn.send(this.stateMsg());
+            sendFramed(conn, this.stateMsg());
           } else {
-            conn.send(this.lobbyMsg());
-            conn.send({ type: 'chatlog', msgs: this.s.chat.slice(-100) } satisfies Msg);
+            sendFramed(conn, this.lobbyMsg());
+            sendFramed(conn, { type: 'chatlog', msgs: this.s.chat.slice(-100) } satisfies Msg);
           }
+          return;
+        }
+        case 'latereq': {
+          if (!this.s.game || !device || !m.player) return;
+          const req = { device, player: { ...m.player, device }, photo: m.photo };
+          this.set({ lateReqs: [...this.s.lateReqs.filter((r) => r.device !== device), req] });
+          sendFramed(conn, { type: 'latewait' } satisfies Msg);
+          netlog('late-request', m.player.name);
           return;
         }
         case 'join': {
           if (!device || this.s.game) return;
           const others = this.s.setup.players.filter((p) => p.device !== device);
           const incoming = m.players.slice(0, Math.max(0, 10 - others.length)).map((p) => ({ ...p, device }));
-          if (incoming.length < m.players.length) conn.send({ type: 'err', key: 'full' } satisfies Msg);
+          if (incoming.length < m.players.length) sendFramed(conn, { type: 'err', key: 'full' } satisfies Msg);
           const photos = { ...this.s.photos };
           incoming.forEach((p) => { if (p.photo) photos[p.id] = p.photo; else delete photos[p.id]; });
           const players = [...others, ...incoming.map(({ photo: _x, ...p }) => p)];
@@ -506,30 +571,34 @@ class Store {
           return;
         }
         case 'sync': {
-          if (this.s.game) conn.send(this.stateMsg()); else conn.send(this.lobbyMsg());
+          if (this.s.game) sendFramed(conn, this.stateMsg()); else sendFramed(conn, this.lobbyMsg());
           return;
         }
         case 'chat': {
           const players = this.s.game?.players ?? this.s.setup.players;
           const p = players.find((x) => x.id === m.from);
-          if (!p || p.device !== device || typeof m.text !== 'string') return;
+          const spectator = m.from.startsWith('~') && device in this.s.spectators;
+          if (spectator) m.from = '~' + this.s.spectators[device];
+          if ((!p || p.device !== device) && !spectator) return;
+          if (typeof m.text !== 'string') return;
           const text = m.text.replace(/\s+/g, ' ').trim().slice(0, CHAT_MAX);
           if (text) this.addChat({ id: uid(8), from: m.from, text, t: Date.now() }, false);
           return;
         }
         case 'ping':
-          conn.send({ type: 'pong' } satisfies Msg);
+          sendFramed(conn, { type: 'pong' } satisfies Msg);
           return;
         case 'act': {
           const g = this.s.game;
           const p = g?.players.find((x) => x.id === m.by);
-          if (!g || !p || p.device !== device) { conn.send({ type: 'err', key: 'e_notNow' } satisfies Msg); return; }
+          if (!g || !p || p.device !== device) { sendFramed(conn, { type: 'err', key: 'e_notNow' } satisfies Msg); return; }
           this.applyLocal(m.by, m.action, conn);
           return;
         }
         default: return;
       }
-    });
+    }));
+    conn.on('error', (e) => netlog('conn-error', `${device || '?'}: ${String((e as Error)?.message ?? e)}`));
     conn.on('close', () => {
       if (device) {
         const set = this.conns.get(device);
@@ -542,20 +611,20 @@ class Store {
   }
 
   private lobbyMsg(): Msg {
-    return { type: 'lobby', setup: this.s.setup, photos: this.s.photos, hostDevice: this.s.device };
+    return { type: 'lobby', setup: this.s.setup, photos: this.s.photos, hostDevice: this.s.device, hostVer: __APP_VERSION__ };
   }
   private stateMsg(): Msg {
-    return { type: 'state', game: this.s.game!, presence: this.s.presence, hostDevice: this.s.device };
+    return { type: 'state', game: this.s.game!, presence: this.s.presence, hostDevice: this.s.device, hostVer: __APP_VERSION__ };
   }
   private broadcastLobby() {
     const m = this.lobbyMsg();
-    this.allConns().forEach((c) => { if (c.open) c.send(m); });
+    this.allConns().forEach((c) => sendFramed(c, m));
   }
   private broadcastState() {
     if (this.s.mode !== 'host' || !this.s.game) return;
     if (this.dropStates > 0) { this.dropStates--; return; }
     const m = this.stateMsg();
-    this.allConns().forEach((c) => { if (c.open) c.send(m); });
+    this.allConns().forEach((c) => sendFramed(c, m));
   }
 
   // ---------------- networking: client ----------------
@@ -629,9 +698,10 @@ class Store {
         this.hostConn = conn;
         this.lastHostMsg = Date.now();
         this.set({ net: 'ok', gen: target, lostSince: 0, joinUntil: 0, joinNotFound: false });
-        conn.send({ type: 'hello', device: this.s.device } satisfies Msg);
+        sendFramed(conn, { type: 'hello', device: this.s.device, ver: __APP_VERSION__ } satisfies Msg);
       });
-      conn.on('data', (raw) => this.onClientData(raw as Msg));
+      conn.on('data', receiveFramed<Msg>((m) => this.onClientData(m)));
+      conn.on('error', (e) => netlog('conn-error', String((e as Error)?.message ?? e)));
       conn.on('close', () => {
         if (this.hostConn === conn) { this.hostConn = null; this.onHostLost(); }
       });
@@ -647,7 +717,7 @@ class Store {
     // watchdog: host pings every 5 s
     this.stopTimers();
     this.timers.push(window.setInterval(() => {
-      if (this.hostConn?.open) this.hostConn.send({ type: 'ping' } satisfies Msg);
+      sendFramed(this.hostConn, { type: 'ping' } satisfies Msg);
       if (this.s.net === 'ok' && Date.now() - this.lastHostMsg > 30000) {
         this.hostConn?.close();
         this.hostConn = null;
@@ -671,7 +741,7 @@ class Store {
     this.lastHostMsg = Date.now();
     switch (m.type) {
       case 'lobby':
-        this.set({ setup: m.setup, photos: m.photos, hostDevice: m.hostDevice, screen: 'lobby' });
+        this.set({ setup: m.setup, photos: m.photos, hostDevice: m.hostDevice, screen: 'lobby', hostVersion: m.hostVer ?? 'old' });
         return;
       case 'photos':
         this.set({ photos: m.photos });
@@ -688,19 +758,31 @@ class Store {
         return;
       }
       case 'state': {
+        netlog('state', `v${m.game.v} (had v${this.s.game?.v ?? '-'}) head=${m.game.q[0]?.k ?? '-'}`);
         // the host is the authority: always take its state (messages on one connection arrive in order,
         // and after a reconnect or a host restart the host's copy is the true one)
-        this.set({ game: m.game, presence: m.presence, hostDevice: m.hostDevice, screen: 'game' });
+        this.set({ game: m.game, presence: m.presence, hostDevice: m.hostDevice, screen: 'game', hostVersion: m.hostVer ?? 'old' });
         this.persist();
         return;
       }
       case 'ping':
         // any difference from the host's copy (newer, older or another game): ask for the real state
-        if (this.s.game && m.v !== undefined && (m.gid !== this.s.game.gid || m.v !== this.s.game.v)) this.send({ type: 'sync' });
+        if (this.s.game && m.v !== undefined && (m.gid !== this.s.game.gid || m.v !== this.s.game.v)) {
+          netlog('out-of-sync', `host v${m.v}, mine v${this.s.game.v} -> sync`);
+          this.send({ type: 'sync' });
+        }
+        return;
+      case 'late':
+        this.set({ screen: 'latejoin', lateOthers: m.players, net: 'ok', joinUntil: 0, joinNotFound: false });
+        return;
+      case 'latewait':
+        this.set({ screen: 'latejoin' });
         return;
       case 'err':
         // the host said no: we may be looking at an old state, so ask for the current one
+        netlog('rejected', m.key);
         if (m.key.startsWith('e_')) this.send({ type: 'sync' });
+        if (m.key === 'lateRefused') { this.toast('lateRefused'); this.goHome(); return; }
         if (m.key === 'started' || m.key === 'full') {
           this.toast(m.key);
           if (m.key === 'started' && !this.s.game) this.set({ net: 'error' });
@@ -759,7 +841,7 @@ class Store {
   }
 
   private send(m: Msg) {
-    if (this.hostConn?.open) this.hostConn.send(m);
+    if (this.hostConn?.open) sendFramed(this.hostConn, m);
     else this.toast('hostLost');
   }
 

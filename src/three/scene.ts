@@ -12,7 +12,7 @@ import { faceValues, simulateDice } from './dice';
 type Side = 'b' | 'l' | 't' | 'r';
 export type BoardLight = 'normal' | 'dim' | 'night';
 const LIGHT: Record<BoardLight, { board: string; exposure: number; hemi: number; sun: number; env: number; sky: string }> = {
-  normal: { board: '#e4e9ec', exposure: 1.05, hemi: 1.1, sun: 2.0, env: 0.55, sky: '#0f3b5f' },
+  normal: { board: '#e8ecee', exposure: 1.05, hemi: 1.1, sun: 2.0, env: 0.55, sky: '#0f3b5f' },
   dim: { board: '#c3cacf', exposure: 0.9, hemi: 0.9, sun: 1.6, env: 0.4, sky: '#0c2f4c' },
   night: { board: '#8f989f', exposure: 0.75, hemi: 0.6, sun: 1.2, env: 0.25, sky: '#071a2b' },
 };
@@ -480,14 +480,14 @@ export class Scene3D {
       const lh = c.side === 'b' || c.side === 't' ? h : w;
       ctx.translate(-lw / 2, -lh / 2);
       const corner = i % this.s === 0;
-      ctx.fillStyle = corner ? '#e2e8e5' : '#f1f3ef';
+      ctx.fillStyle = corner ? '#e5ebe8' : '#f5f7f3';
       ctx.fillRect(0, 0, lw, lh);
-      ctx.strokeStyle = '#9fb3c1';
-      ctx.lineWidth = k * 0.02;
+      ctx.strokeStyle = '#7f95a4';
+      ctx.lineWidth = k * 0.024;
       ctx.strokeRect(0, 0, lw, lh);
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillStyle = '#14212b';
+      ctx.fillStyle = '#0c151c';
       const pr = g.props[i];
       if (sq.group !== undefined) {
         ctx.fillStyle = b.groups[sq.group].color;
@@ -498,7 +498,7 @@ export class Scene3D {
         ctx.fillStyle = owner?.color ?? '#000';
         ctx.fillRect(0, lh - k * 0.13, lw, k * 0.13);
       }
-      ctx.fillStyle = '#14212b';
+      ctx.fillStyle = '#0c151c';
       if (corner) {
         // corners: icon and label run diagonally, like on a real board
         ctx.save();
@@ -521,7 +521,7 @@ export class Scene3D {
         ctx.font = font(k * 0.12, 600);
         const label = sq.kind === 'station' || sq.kind === 'utility' ? sqName(g, i, this.lang) : sq.name[this.lang];
         wrap(ctx, label, lw * 0.92, k * 0.14, 2).forEach((line, n) => ctx.fillText(line, lw / 2, lh * 0.66 + n * k * 0.14));
-        if (sq.price) { ctx.font = font(k * 0.12, 400); ctx.fillText(priceOf(g, i) + ' €', lw / 2, lh - k * 0.23); }
+        if (sq.price) { ctx.font = font(k * 0.12, 600); ctx.fillText(priceOf(g, i) + ' €', lw / 2, lh - k * 0.23); }
         if (sq.tax) { ctx.font = font(k * 0.12, 400); ctx.fillText(sq.tax + ' €', lw / 2, lh - k * 0.23); }
       }
       if (pr?.mort) {
