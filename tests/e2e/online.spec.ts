@@ -156,3 +156,10 @@ test('@online a phone stuck on an old screen catches up with the host', async ({
   const v = async (p: typeof host) => p.evaluate(() => (window as unknown as W).__store.get().game.v);
   await expect.poll(async () => (await v(guest)) === (await v(host)), { timeout: 15_000 }).toBe(true);
 });
+
+test('@online a wrong code says clearly that no such game exists', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => { localStorage.clear(); localStorage.setItem('gtn-prefs', JSON.stringify({ device: 'w1', lang: 'el', fx: { gfx: '2d', sound: false, vibrate: false, shake: false, cinema: false } })); });
+  await page.goto('/?join=ZZZZ9');
+  await expect(page.locator('.toast')).toContainText('Δεν βρέθηκε παρτίδα', { timeout: 45_000 });
+});

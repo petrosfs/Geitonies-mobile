@@ -133,6 +133,7 @@ const el: RuleSection[] = [
       'Διπλός μισθός: όποιος σταματήσει ακριβώς στην Αφετηρία παίρνει {salary} × 2.',
       'Όχι ενοίκιο από τη φυλακή: όσο ο ιδιοκτήτης είναι στη φυλακή, δεν εισπράττει ενοίκια.',
       'Αγορές μετά τον πρώτο γύρο: κανείς δεν αγοράζει (ούτε σε δημοπρασία) πριν κάνει έναν πλήρη γύρο.',
+      'Πάσο: όποιος σταματά σε ελεύθερη περιοχή μπορεί, εκτός από αγορά ή δημοπρασία, να πει πάσο. Η περιοχή μένει στην τράπεζα.',
     ],
   },
   {
@@ -263,6 +264,7 @@ const en: RuleSection[] = [
       'Double salary: landing exactly on Start pays {salary} × 2.',
       'No rent from jail: owners in jail don’t collect rent.',
       'Buy after the first lap: nobody buys (or bids) before completing a full lap.',
+      'Pass: a player on a free property may, besides buying or auctioning it, simply pass. It stays with the bank.',
     ],
   },
   {

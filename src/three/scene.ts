@@ -3,7 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { cellPos } from '../game/layout';
-import { board as boardOf, sqName } from '../game/engine';
+import { board as boardOf, priceOf, sqName } from '../game/engine';
 import type { Game, Lang } from '../game/types';
 import { buzz, clack, clank, siren, tick } from '../fx';
 import { buildPiece, GLIDERS, PIECE_HEIGHT } from './pieces';
@@ -509,14 +509,14 @@ export class Scene3D {
         wrap(ctx, sqName(g, i, this.lang), lw * 0.9, k * 0.17, 3).forEach((line, n, arr) =>
           ctx.fillText(line, lw / 2, lh * 0.5 + (n - (arr.length - 1) / 2) * k * 0.17));
         ctx.font = font(k * 0.13, 400);
-        ctx.fillText(sq.price + ' €', lw / 2, lh - k * 0.25);
+        ctx.fillText(priceOf(g, i) + ' €', lw / 2, lh - k * 0.25);
       } else {
         ctx.font = font(k * 0.36, 400);
         ctx.fillText(ICON[sq.kind] ?? '', lw / 2, lh * 0.36);
         ctx.font = font(k * 0.12, 600);
         const label = sq.kind === 'station' || sq.kind === 'utility' ? sqName(g, i, this.lang) : sq.name[this.lang];
         wrap(ctx, label, lw * 0.92, k * 0.14, 2).forEach((line, n) => ctx.fillText(line, lw / 2, lh * 0.66 + n * k * 0.14));
-        if (sq.price) { ctx.font = font(k * 0.12, 400); ctx.fillText(sq.price + ' €', lw / 2, lh - k * 0.23); }
+        if (sq.price) { ctx.font = font(k * 0.12, 400); ctx.fillText(priceOf(g, i) + ' €', lw / 2, lh - k * 0.23); }
         if (sq.tax) { ctx.font = font(k * 0.12, 400); ctx.fillText(sq.tax + ' €', lw / 2, lh - k * 0.23); }
       }
       if (pr?.mort) {

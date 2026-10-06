@@ -148,16 +148,36 @@ test('names: choose Thessaloniki and move a neighbourhood to another colour', as
     await page.getByText('Προσθήκη παίκτη').click();
     await page.locator('.pedit input').first().fill(n);
   }
-  await page.getByRole('button', { name: 'Ονόματα' }).click();
+  await page.getByRole('button', { name: /Ονόματα/ }).click();
   await page.getByRole('button', { name: 'Θεσσαλονίκη' }).click();
-  await expect(page.locator('.name-row input').first()).toHaveAttribute('placeholder', 'Μενεμένη');
+  await expect(page.locator('.name-row .name-in').first()).toHaveAttribute('placeholder', 'Μενεμένη');
   // move the first (cheapest) neighbourhood to the most expensive square
   await page.locator('.name-group').first().locator('.move').first().click();
   await page.locator('.name-group').nth(7).locator('.move').last().click();
-  await expect(page.locator('.name-group').nth(7).locator('input').last()).toHaveAttribute('placeholder', 'Μενεμένη');
+  await expect(page.locator('.name-group').nth(7).locator('.name-in').last()).toHaveAttribute('placeholder', 'Μενεμένη');
   await page.getByText('Έναρξη παιχνιδιού').click();
   const g = await page.evaluate(() => JSON.parse(localStorage.getItem('gtn-save')!).game);
   expect(g.city).toBe('thessaloniki');
   expect(g.nameMap[39]).toBe(1);
+  expect(errors).toEqual([]);
+});
+
+test("prices: change a property's price in the setup and buy it at that price", async ({ page }) => {
+  const errors = watchErrors(page);
+  await freshStart(page, { fx: { gfx: '2d', sound: false, vibrate: false, shake: false, cinema: false } });
+  await page.getByText('Νέα παρτίδα σε αυτό το κινητό').click();
+  for (const n of ['Α', 'Β']) {
+    await page.getByText('Προσθήκη παίκτη').click();
+    await page.locator('.pedit input').first().fill(n);
+  }
+  await page.getByRole('button', { name: /Ονόματα/ }).click();
+  const first = page.locator('.name-group').first().locator('.price-in').first();
+  await expect(first).toHaveAttribute('placeholder', '60');
+  await first.fill('87');
+  await first.blur();
+  await expect(first).toHaveValue('90');   // rounded to 10 €
+  await page.getByText('Έναρξη παιχνιδιού').click();
+  const g = await page.evaluate(() => JSON.parse(localStorage.getItem('gtn-save')!).game);
+  expect(g.prices).toEqual({ 1: 90 });
   expect(errors).toEqual([]);
 });

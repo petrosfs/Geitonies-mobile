@@ -451,4 +451,33 @@ describe('game flow', () => {
     expect(a.gid).toBeTruthy();
     expect(b.gid).not.toBe(a.gid);
   });
+
+  it('house rule "pass": the property stays with the bank, no auction; without the rule it is not allowed', () => {
+    let g = roll(mk(2, { allowPass: true }), 1, 2);
+    expect(g.q[0]).toMatchObject({ k: 'buy', sq: 3 });
+    g = act(g, 'p0', { t: 'skip' });
+    expect(g.q).toEqual([]);
+    expect(g.props[3].owner).toBeNull();
+    const h = roll(mk(), 1, 2);
+    expectRule(() => act(h, 'p0', { t: 'skip' }), 'notNow');
+  });
+
+  it('custom prices: used for buying, mortgages, worth; bad values are ignored', () => {
+    const base = mk();
+    const g0 = newGame({
+      boardId: 'classic', names: [], customCards: [], players: base.players.map((p) => ({ ...p })), rules: base.rules,
+      prices: { 3: 500, 1: 75, 5: 0, 4: 300, 39: 400 },  // 75 not a multiple of 10, 0 too low, 4 is a tax square, 39 = normal price
+    }, 7, 0);
+    expect(g0.prices).toEqual({ 3: 500 });
+    g0.cur = 0; g0.players.forEach((p) => { p.lapped = true; });
+    let g = roll(g0, 1, 2);
+    g = act(g, 'p0', { t: 'buy' });
+    expect(g.players[0].cash).toBe(1000);
+    g = act(g, 'p0', { t: 'skipRename' });
+    g = act(g, 'p0', { t: 'mortgage', sq: 3 });
+    expect(g.players[0].cash).toBe(1250);
+    expect(netWorth(g, 'p0')).toBe(1250 + 250);
+    g = act(g, 'p0', { t: 'unmortgage', sq: 3 });
+    expect(g.players[0].cash).toBe(1250 - 275);
+  });
 });

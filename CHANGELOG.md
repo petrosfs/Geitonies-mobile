@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.6.0
+- Online across countries: the free relays PeerJS used to provide no longer exist; replaced with working public STUN servers and the Open Relay TURN service, with a slot for a relay of your own. Longer connection wait and clearer messages (game not found vs. networks blocking the connection).
+- House rule: pass on a free property without starting an auction.
+- Setup → Names & prices: change the price of any property (multiples of 10 €; rents stay as in the table).
+- The classic board is now checked by tests against the official prices and rents.
+- Fix: lifting a mortgage on some prices cost 1 € too much (floating-point rounding).
+
 ## 1.5.0
 - City name sets: Athens (default), Patras and Thessaloniki, chosen in Setup → Names; stations follow the city too.
 - Move a neighbourhood to another colour group before the game (tap ⇅ on two squares to swap them), e.g. Glyfada into the blue group.

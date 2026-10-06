@@ -23,10 +23,11 @@ export function RulesSheet({ g, onClose }: { g?: Game | null; onClose: () => voi
             <li>{t('rulesSalaryFine', { s: v.salary, f: v.fine })}</li>
             <li>{t('auctionMode')}: {t(r.auction === 'open' ? 'auctionOpen' : 'auctionSealed')}</li>
             <li>{t('timeLimit')}: {r.timeLimitMin ? t('minutes', { n: r.timeLimitMin }) : t('off')}</li>
-            {(['freeParking', 'doubleGo', 'noRentInJail', 'buyAfterLap'] as const).map((k) => (
-              <li key={k}>{onOff(r[k])} {t('r_' + k)}</li>
+            {(['freeParking', 'doubleGo', 'noRentInJail', 'buyAfterLap', 'allowPass'] as const).map((k) => (
+              <li key={k}>{onOff(!!r[k])} {t('r_' + k)}</li>
             ))}
             {customCards > 0 && <li>🃏 {t('rulesCustomCards', { n: customCards })}</li>}
+            {g.prices && Object.keys(g.prices).length > 0 && <li>🏷️ {t('rulesPrices', { n: Object.keys(g.prices).length })}</li>}
           </ul>
         </div>
       )}

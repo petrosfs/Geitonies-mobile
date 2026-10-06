@@ -209,13 +209,22 @@ function BoardTab({ setup, set }: { setup: Setup; set: (p: Partial<Setup>) => vo
 }
 
 function NamesTab({ setup, set }: { setup: Setup; set: (p: Partial<Setup>) => void }) {
-  const { t, m, lang } = useT();
+  const { t, lang } = useT();
   const b = BOARDS[setup.boardId];
   const [picked, setPicked] = useState<number | null>(null);
   const map = setup.nameMap?.length === b.squares.length ? setup.nameMap : b.squares.map((_, i) => i);
   const names = b.squares.map((_, k) => setup.names[k] ?? '');
   const shown = (i: number) => defaultName(setup.boardId, setup.city, map, i, lang);
   const upd = (i: number, v: string) => { const n = [...names]; n[i] = v; set({ names: n }); };
+  /** custom price: while typing keep the number; when leaving the field round to 10 € (10–5000), empty = normal price */
+  const setPrice = (i: number, v: string, final: boolean) => {
+    const prices = { ...(setup.prices ?? {}) };
+    const n = Math.floor(Number(v));
+    if (!v || !Number.isFinite(n) || n <= 0) delete prices[i];
+    else prices[i] = final ? Math.min(5000, Math.max(10, Math.round(n / 10) * 10)) : n;
+    if (final && prices[i] === b.squares[i].price) delete prices[i];
+    set({ prices });
+  };
   /** first tap picks a square, second tap swaps the two names (same kind of square only) */
   const tapMove = (i: number) => {
     if (picked === null || picked === i || b.squares[picked].kind !== b.squares[i].kind) { setPicked(picked === i ? null : i); return; }
@@ -235,8 +244,10 @@ function NamesTab({ setup, set }: { setup: Setup; set: (p: Partial<Setup>) => vo
         {movable && (
           <button className="btn small ghost move" aria-label={t('moveName')} onClick={() => tapMove(i)}>⇅</button>
         )}
-        <input value={names[i]} placeholder={shown(i)} maxLength={32} onChange={(e) => upd(i, e.target.value)} />
-        <span className="small muted price">{m(sq.price!)}</span>
+        <input className="name-in" value={names[i]} placeholder={shown(i)} maxLength={32} onChange={(e) => upd(i, e.target.value)} />
+        <input className={'price-in' + (setup.prices?.[i] ? ' changed' : '')} type="number" inputMode="numeric" step={10} min={10} max={5000}
+          aria-label={t('price')} value={setup.prices?.[i] ?? ''} placeholder={String(sq.price)}
+          onChange={(e) => setPrice(i, e.target.value, false)} onBlur={(e) => setPrice(i, e.target.value, true)} />
       </div>
     );
   };
@@ -267,8 +278,8 @@ function NamesTab({ setup, set }: { setup: Setup; set: (p: Partial<Setup>) => vo
       <div className="name-group" style={{ borderLeftColor: 'var(--ink-soft)' }}>
         {utils.map((i) => row(i, <span className="chip">💡</span>, false))}
       </div>
-      <p className="muted small">{t('namesHelp')}</p>
-      <button className="btn ghost" onClick={() => { setPicked(null); set({ names: [], nameMap: undefined }); }}>{t('resetNames')}</button>
+      <p className="muted small">{t('namesHelp')} {t('pricesHelp')}</p>
+      <button className="btn ghost" onClick={() => { setPicked(null); set({ names: [], nameMap: undefined, prices: undefined }); }}>{t('resetNames')}</button>
     </div>
   );
 }
@@ -404,9 +415,9 @@ function RulesTab({ setup, set, online }: { setup: Setup; set: (p: Partial<Setup
         </label>
       ))}
       <h3>{t('houseRules')}</h3>
-      {(['freeParking', 'doubleGo', 'noRentInJail', 'buyAfterLap'] as const).map((k) => (
+      {(['freeParking', 'doubleGo', 'noRentInJail', 'buyAfterLap', 'allowPass'] as const).map((k) => (
         <label key={k} className="check">
-          <input type="checkbox" checked={r[k]} onChange={(e) => rules({ [k]: e.target.checked })} />
+          <input type="checkbox" checked={!!r[k]} onChange={(e) => rules({ [k]: e.target.checked })} />
           {t('r_' + k)}
         </label>
       ))}

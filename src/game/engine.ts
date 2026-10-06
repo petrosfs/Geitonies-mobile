@@ -12,6 +12,24 @@ function fail(key: string): never { throw new RuleError(key); }
 
 export const board = (g: Game): Board => BOARDS[g.boardId];
 
+/** the price of a square in this game (custom price from the setup, or the board's) */
+export function priceOf(g: Game, sq: number): number {
+  return g.prices?.[sq] ?? board(g).squares[sq].price ?? 0;
+}
+
+/** keep only sensible custom prices: buyable squares, multiples of 10, 10–5000 € */
+export function validPrices(b: Board, prices: Record<number, number> | undefined): Record<number, number> | undefined {
+  if (!prices) return undefined;
+  const out: Record<number, number> = {};
+  for (const [k, v] of Object.entries(prices)) {
+    const sq = Number(k);
+    if (b.squares[sq]?.price === undefined) continue;
+    if (!Number.isInteger(v) || v % 10 !== 0 || v < 10 || v > 5000) continue;
+    if (v !== b.squares[sq].price) out[sq] = v;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
 function rand(g: Game): number {
   let t = (g.rng = (g.rng + 0x6d2b79f5) >>> 0);
   t = Math.imul(t ^ (t >>> 15), t | 1);
@@ -99,13 +117,14 @@ export function netWorth(g: Game, id: string): number {
   for (const sq of ownedBy(g, id)) {
     const s = b.squares[sq];
     const pr = g.props[sq];
-    w += pr.mort ? s.price! / 2 : s.price!;
+    w += pr.mort ? priceOf(g, sq) / 2 : priceOf(g, sq);
     if (s.house) w += s.house * pr.houses;
   }
   return w;
 }
 
-export const unmortgageCost = (price: number) => Math.ceil((price / 2) * 1.1);
+/** half the price + 10%, in whole integers (price * 1.1 / 2 would give 110.00000000000001 -> 111 for 200 €) */
+export const unmortgageCost = (price: number) => Math.ceil((price * 11) / 20);
 
 /** who can act right now */
 export function waiting(g: Game): string[] {
@@ -159,6 +178,7 @@ export function newGame(setup: Setup, seed: number, now: number): Game {
     names: b.squares.map((_, i) => setup.names[i] ?? ''),
     city: setup.city ?? 'athens',
     nameMap: validNameMap(setup.boardId, setup.nameMap),
+    prices: validPrices(b, setup.prices),
     rules: setup.rules,
     players: setup.players.map((p) => ({
       ...p, cash: b.startCash, pos: 0, jail: false, jailTries: 0, jailCards: [], out: false, lapped: false,
@@ -467,7 +487,7 @@ function executeTrade(g: Game, t: Trade) {
   validateTrade(g, t);
   const a = pl(g, t.from), b = pl(g, t.to);
   const fee = (props: number[]) =>
-    props.filter((sq) => g.props[sq].mort).reduce((s, sq) => s + Math.ceil(board(g).squares[sq].price! / 20), 0);
+    props.filter((sq) => g.props[sq].mort).reduce((s, sq) => s + Math.ceil(priceOf(g, sq) / 20), 0);
   const aFee = fee(t.get.props), bFee = fee(t.give.props);
   if (a.cash - t.give.cash + t.get.cash < aFee) fail('tradeFeeFrom');
   if (b.cash - t.get.cash + t.give.cash < bFee) fail('tradeFeeTo');
@@ -531,14 +551,14 @@ function mortgage(g: Game, by: string, sq: number) {
   if (pr.mort) fail('already');
   if (groupHasBuildings(g, sq)) fail('sellFirst');
   pr.mort = true;
-  pl(g, by).cash += board(g).squares[sq].price! / 2;
+  pl(g, by).cash += priceOf(g, sq) / 2;
   log(g, 'mortgaged', { p: by, sq });
 }
 
 function unmortgage(g: Game, by: string, sq: number) {
   const pr = g.props[sq];
   if (pr?.owner !== by || !pr.mort) fail('notMortgaged');
-  const cost = unmortgageCost(board(g).squares[sq].price!);
+  const cost = unmortgageCost(priceOf(g, sq));
   const p = pl(g, by);
   if (p.cash < cost) fail('noCash');
   p.cash -= cost;
@@ -667,7 +687,7 @@ export function apply(prev: Game, by: string, a: Action, now: number): Game {
     case 'buy': {
       if (head?.k !== 'buy' || head.who !== by) fail('notNow');
       const h = head as Extract<Pending, { k: 'buy' }>;
-      const price = board(g).squares[h.sq].price!;
+      const price = priceOf(g, h.sq);
       if (me!.cash < price) fail('noCash');
       me!.cash -= price;
       g.props[h.sq].owner = by;
@@ -682,6 +702,14 @@ export function apply(prev: Game, by: string, a: Action, now: number): Game {
       log(g, 'declined', { p: by, sq: h.sq });
       const auc = startAuction(g, h.sq);
       if (auc) { g.q[0] = auc; startNext(g); } else resolveHead(g, () => {});
+      break;
+    }
+    case 'skip': {
+      // house rule: pass on a free property; it stays with the bank and there is no auction
+      if (head?.k !== 'buy' || head.who !== by || !g.rules.allowPass) fail('notNow');
+      const h = head as Extract<Pending, { k: 'buy' }>;
+      log(g, 'skipped', { p: by, sq: h.sq });
+      resolveHead(g, () => {});
       break;
     }
     case 'bid': {
@@ -811,7 +839,7 @@ export function autoAction(g: Game, id: string): Action | null {
   const p = pl(g, id);
   if (h) {
     switch (h.k) {
-      case 'buy': return { t: 'decline' };
+      case 'buy': return g.rules.allowPass ? { t: 'skip' } : { t: 'decline' };
       case 'card': return { t: 'cardOk' };
       case 'rename': return { t: 'skipRename' };
       case 'auction': return g.rules.auction === 'sealed' ? { t: 'sealed', amount: 0 } : { t: 'pass' };

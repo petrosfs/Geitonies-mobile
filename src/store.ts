@@ -1,4 +1,5 @@
 import Peer, { type DataConnection } from 'peerjs';
+import { loadIceServers, peerOptions } from './netconfig';
 import { apply, autoAction, newGame, RuleError, waiting } from './game/engine';
 import { BOARDS } from './game/boards';
 import type { Action, Game, Lang, PlayerSetup, Setup } from './game/types';
@@ -129,6 +130,7 @@ class Store {
   private beat = 0;
 
   constructor() {
+    void loadIceServers();
     document.addEventListener('visibilitychange', () => this.onResume());
     const prefs = loadPrefs();
     this.s = {
@@ -394,7 +396,7 @@ class Store {
 
   private openHost(room: string, gen: number, onTaken?: () => void) {
     this.set({ net: 'connecting', room, gen, mode: 'host', hostDevice: this.s.device });
-    const peer = new Peer(peerId(room, gen));
+    const peer = new Peer(peerId(room, gen), peerOptions());
     this.peer = peer;
     peer.on('open', () => {
       this.set({ net: 'ok' });
@@ -553,19 +555,23 @@ class Store {
   join(code: string) {
     const room = code.trim().toUpperCase();
     if (!room) return;
-    this.set({ room, gen: 0 });
-    this.connectClient(room, 0, false);
+    this.set({ room, gen: 0, net: 'connecting' });
+    void loadIceServers().then(() => this.connectClient(room, 0, false));
   }
 
   /** try host ids gen, gen+1, gen+2 (someone may have taken over) */
   private connectClient(room: string, gen: number, resuming: boolean) {
     this.clearPeer();
     this.set({ net: 'connecting', mode: 'client', room });
-    const peer = new Peer();
+    const peer = new Peer(peerOptions());
     this.peer = peer;
     let attempt = 0;
+    let found = false;          // some host id answered (the game exists)
+    let current = -1;           // which attempt the pending connection belongs to
+    let timer = 0;
     const tryNext = () => {
       if (this.peer !== peer) return;
+      window.clearTimeout(timer);
       if (attempt > 2) {
         if (resuming || this.s.game) {
           // keep trying in the background while the host is away
@@ -573,16 +579,23 @@ class Store {
           this.retryTimer = window.setTimeout(() => this.connectClient(room, this.s.gen, true), 5000);
         } else {
           this.set({ net: 'error' });
-          this.toast('connectFail');
+          // the game was found but no connection could be made: the networks don't allow it
+          this.toast(found ? 'connectBlocked' : 'connectNotFound');
         }
         return;
       }
       const target = gen + attempt;
+      current = attempt;
       attempt++;
       const conn = peer.connect(peerId(room, target), { reliable: true, serialization: 'json' });
-      const timeout = window.setTimeout(() => { if (!conn.open) { conn.close(); tryNext(); } }, 6000);
+      // a missing id is reported within a second or two; if nothing comes back the host exists and the
+      // connection is being negotiated, which can take a while between countries or through a relay
+      const mine = current;
+      window.setTimeout(() => { if (current === mine && !conn.open) found = true; }, 3000);
+      timer = window.setTimeout(() => { if (!conn.open) { conn.close(); tryNext(); } }, 25000);
       conn.on('open', () => {
-        clearTimeout(timeout);
+        window.clearTimeout(timer);
+        found = true;
         this.hostConn = conn;
         this.lastHostMsg = Date.now();
         this.set({ net: 'ok', gen: target, lostSince: 0 });
@@ -595,7 +608,7 @@ class Store {
     };
     peer.on('open', () => tryNext());
     peer.on('error', (err: { type?: string }) => {
-      if (err.type === 'peer-unavailable') { tryNext(); return; }
+      if (err.type === 'peer-unavailable') { current = -1; tryNext(); return; }
       if (this.s.game) { this.onHostLost(); return; }
       this.set({ net: 'error' });
       this.toast('connectFail');
@@ -689,7 +702,7 @@ class Store {
   /** returning host: join a newer host if one exists, otherwise host again */
   private probeTakeover(room: string, gen: number) {
     this.set({ net: 'connecting' });
-    const peer = new Peer();
+    const peer = new Peer(peerOptions());
     this.peer = peer;
     let k = 1;
     const tryNext = () => {

@@ -57,6 +57,8 @@ export interface Rules {
   doubleGo: boolean;
   noRentInJail: boolean;
   buyAfterLap: boolean;
+  /** a player who lands on a free property may pass: it stays with the bank, no auction (missing = off) */
+  allowPass?: boolean;
   /** 0 = off */
   timeLimitMin: number;
   autoMoveSec: number;
@@ -125,6 +127,7 @@ export interface Game {
   names: string[];
   city?: CityId;
   nameMap?: number[];
+  prices?: Record<number, number>;
   rules: Rules;
   players: Player[];
   cur: number;
@@ -158,6 +161,7 @@ export type Action =
   | { t: 'roll' }
   | { t: 'buy' }
   | { t: 'decline' }
+  | { t: 'skip' }
   | { t: 'bid'; amount: number }
   | { t: 'pass' }
   | { t: 'sealed'; amount: number }
@@ -200,6 +204,8 @@ export interface Setup {
   city?: CityId;
   /** nameMap[square] = the square whose default name is shown there (names moved between squares) */
   nameMap?: number[];
+  /** custom prices per square (multiples of 10) */
+  prices?: Record<number, number>;
   customCards: CustomCard[];
   rules: Rules;
 }

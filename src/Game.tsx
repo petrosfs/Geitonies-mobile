@@ -4,7 +4,7 @@ import { RulesSheet } from './Rules';
 import { buzz, hasWebGL, listenShake, requestMotion, siren, unlockAudio } from './fx';
 import { CHAT_MAX, store, TAKEOVER_MS } from './store';
 import {
-  bankStock, board, curP, hasMonopoly, netWorth, ownedBy, rentFor, sqName, unmortgageCost, waiting,
+  bankStock, board, curP, hasMonopoly, netWorth, ownedBy, priceOf, rentFor, sqName, unmortgageCost, waiting,
 } from './game/engine';
 import type { Game, Offer, Pending, Player, Trade } from './game/types';
 import { BoardView, Die } from './Board';
@@ -289,7 +289,7 @@ function ActorPanel({ g, id, onTrade }: { g: Game; id: string; onTrade: () => vo
   const b = board(g);
 
   if (head?.k === 'buy') {
-    const price = b.squares[head.sq].price!;
+    const price = priceOf(g, head.sq);
     return (
       <div className="panel-act">
         <div className="who" style={{ color: p.color }}>{p.name}</div>
@@ -297,7 +297,10 @@ function ActorPanel({ g, id, onTrade }: { g: Game; id: string; onTrade: () => vo
         {p.cash < price && <p className="muted small">{t('cantAfford')}</p>}
         <div className="row">
           <button className="btn primary grow" disabled={p.cash < price} onClick={() => store.act(id, { t: 'buy' })}>{t('buy', { n: m(price) })}</button>
-          <button className="btn ghost" onClick={() => store.act(id, { t: 'decline' })}>{t('decline')}</button>
+          <button className="btn ghost" onClick={() => store.act(id, { t: 'decline' })}>{t(g.rules.allowPass ? 'toAuction' : 'decline')}</button>
+          {g.rules.allowPass && (
+            <button className="btn ghost" onClick={() => store.act(id, { t: 'skip' })}>{t('passProp')}</button>
+          )}
         </div>
       </div>
     );
@@ -467,7 +470,7 @@ function SquareInfo({ g, sq, onClose }: { g: Game; sq: number; onClose: () => vo
           {pr.houses > 0 ? ` · ${pr.houses === 5 ? t('hotel') : t('houses', { n: pr.houses })}` : ''}
         </p>
       )}
-      {s.price !== undefined && <p>{t('price')}: {m(s.price)}</p>}
+      {s.price !== undefined && <p>{t('price')}: {m(priceOf(g, sq))}</p>}
       {s.kind === 'street' && (
         <table className="rent">
           <tbody>
@@ -521,10 +524,10 @@ function PropsSheet({ g, id, onClose }: { g: Game; id: string; onClose: () => vo
                     <button className="btn small ghost" onClick={() => store.act(id, { t: 'sell', sq })}>{t('sellHouse', { n: m(s.house! / 2) })}</button>
                   )}
                   {!pr.mort && pr.houses === 0 && (
-                    <button className="btn small ghost" onClick={() => store.act(id, { t: 'mortgage', sq })}>{t('mortgage', { n: m(s.price! / 2) })}</button>
+                    <button className="btn small ghost" onClick={() => store.act(id, { t: 'mortgage', sq })}>{t('mortgage', { n: m(priceOf(g, sq) / 2) })}</button>
                   )}
                   {pr.mort && (
-                    <button className="btn small ghost" onClick={() => store.act(id, { t: 'unmortgage', sq })}>{t('unmortgage', { n: m(unmortgageCost(s.price!)) })}</button>
+                    <button className="btn small ghost" onClick={() => store.act(id, { t: 'unmortgage', sq })}>{t('unmortgage', { n: m(unmortgageCost(priceOf(g, sq))) })}</button>
                   )}
                 </div>
               )}
