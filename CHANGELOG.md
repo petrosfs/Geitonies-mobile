@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.0
+- Player photo straight from the camera, inside the app (front/back camera, round preview of what is kept); “From file” for the gallery. Falls back to the phone's camera app if live camera access isn't available.
+- Repository: issue forms for bugs and ideas, security note.
+
 ## 1.7.0
 - Computers and tablets: the board fills the left side and the controls sit in a column on the right; dialogs open in the middle of the screen.
 - Joining a game keeps trying for up to 2 minutes (with a timer and a cancel button), so a host who stepped out to send the code can come back; hosts get a reminder to stay on the screen and a “Send the code” button (share sheet).

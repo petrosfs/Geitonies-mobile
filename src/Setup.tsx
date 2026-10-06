@@ -6,8 +6,9 @@ import { BOARDS } from './game/boards';
 import { CITIES, CITY_IDS, defaultName } from './game/cities';
 import { CUSTOM_EFFECTS, type CustomEffectKind } from './game/cards';
 import type { CustomCard, Deck, Effect, PlayerSetup, Setup } from './game/types';
-import { COLORS, EMOJIS, readPhoto, useStore, useT } from './ui';
+import { canUseCamera, COLORS, EMOJIS, readPhoto, useStore, useT } from './ui';
 import { Avatar, PieceIcon } from './components';
+import { CameraSheet } from './Camera';
 import { pieceText } from './three/pieces';
 import { LightPicker } from './Game';
 
@@ -15,7 +16,24 @@ const newId = () => Math.random().toString(36).slice(2, 10);
 
 // ---------------- players ----------------
 
-export function PlayersEditor({ players, photos, onChange, canRemoveOthers, showDevice, others = [] }: {
+export function PlayersEditor(props: Omit<Parameters<typeof PlayersEditorInner>[0], 'setCameraFor'>) {
+  const [cameraFor, setCameraFor] = useState<string | null>(null);
+  return (
+    <>
+      <PlayersEditorInner {...props} setCameraFor={setCameraFor} />
+      {cameraFor && (
+        <CameraSheet
+          onClose={() => setCameraFor(null)}
+          onShot={(photo) => { props.onChange(props.players, { ...props.photos, [cameraFor]: photo }); setCameraFor(null); }}
+          onFail={() => { const id = cameraFor; setCameraFor(null); document.getElementById('cam-' + id)?.click(); }}
+        />
+      )}
+    </>
+  );
+}
+
+function PlayersEditorInner({ players, photos, onChange, canRemoveOthers, showDevice, others = [], setCameraFor }: {
+  setCameraFor: (id: string | null) => void;
   players: PlayerSetup[];
   photos: Record<string, string>;
   onChange: (players: PlayerSetup[], photos: Record<string, string>) => void;
@@ -87,12 +105,23 @@ export function PlayersEditor({ players, photos, onChange, canRemoveOthers, show
                     ))}
                   </div>
                 </div>
-                <div className="field row">
+                <div className="field row photo-row">
+                  <button className="btn ghost" onClick={() => {
+                    if (canUseCamera()) setCameraFor(p.id);
+                    else document.getElementById('cam-' + p.id)?.click();
+                  }}>📷 {t('takePhoto')}</button>
+                  {/* fallback: the phone's own camera app */}
+                  <input id={'cam-' + p.id} type="file" accept="image/*" capture="user" hidden onChange={async (e) => {
+                    const f = e.target.files?.[0];
+                    if (f) onChange(players, { ...photos, [p.id]: await readPhoto(f) });
+                    e.target.value = '';
+                  }} />
                   <label className="btn ghost">
-                    📷 {t('takePhoto')}
-                    <input type="file" accept="image/*" capture="user" hidden onChange={async (e) => {
+                    🖼️ {t('choosePhoto')}
+                    <input type="file" accept="image/*" hidden onChange={async (e) => {
                       const f = e.target.files?.[0];
                       if (f) onChange(players, { ...photos, [p.id]: await readPhoto(f) });
+                      e.target.value = '';
                     }} />
                   </label>
                   {photos[p.id] && (

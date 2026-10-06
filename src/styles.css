@@ -452,3 +452,12 @@ h2 .piece-img { vertical-align: -6px; }
 @keyframes coinfall { to { transform: translateY(70vh) rotate(540deg); opacity: 0.2; } }
 @media (prefers-reduced-motion: reduce) { .rentcard, .rentbanner .coins span { animation: none; } }
 .join-notfound { color: var(--alert); font-weight: 600; margin: 4px 0; }
+
+/* ---------- camera ---------- */
+.photo-row { flex-wrap: wrap; }
+.camera { position: relative; width: min(100%, 360px); aspect-ratio: 1; margin: 0 auto 10px; border-radius: 16px; overflow: hidden; background: #0b1b29; }
+.camera video { width: 100%; height: 100%; object-fit: cover; }
+.camera video.mirror { transform: scaleX(-1); }
+.camera-frame { position: absolute; inset: 8%; border: 3px solid rgba(255, 255, 255, 0.85); border-radius: 50%; box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.25); pointer-events: none; }
+.camera-wait { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 20px; color: #fff; }
+.camera-actions { margin-bottom: 8px; }

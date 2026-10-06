@@ -1,0 +1,31 @@
+name: 🐞 Bug report / Πρόβλημα
+description: Something doesn't work as expected · Κάτι δεν δουλεύει σωστά
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened? · Τι έγινε;
+      description: What you did, what you expected, what happened instead. Screenshots help a lot.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: App version · Έκδοση
+      description: Shown at the bottom of the home screen, e.g. "v1.8.0 · 5d9d933".
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode · Τρόπος
+      options:
+        - One phone · Ένα κινητό
+        - Online (host) · Online (οικοδεσπότης)
+        - Online (joined) · Online (συνδέθηκα)
+  - type: input
+    id: device
+    attributes:
+      label: Device and browser · Συσκευή και browser
+      placeholder: e.g. Android 14, Chrome · iPhone 13, Safari · Windows, Edge

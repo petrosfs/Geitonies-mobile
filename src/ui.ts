@@ -21,19 +21,25 @@ export const COLORS = ['#e5484d', '#f76b15', '#e2a300', '#30a46c', '#12a594', '#
 export const EMOJIS = PIECES;
 
 /** resize a camera/gallery photo to a small square jpeg */
+/** square 96×96 JPEG from any image source (centre crop) */
+export function squarePhoto(src: CanvasImageSource, w: number, h: number, mirror = false): string {
+  const S = 96;
+  const c = document.createElement('canvas');
+  c.width = S; c.height = S;
+  const ctx = c.getContext('2d')!;
+  const side = Math.min(w, h);
+  if (mirror) { ctx.translate(S, 0); ctx.scale(-1, 1); }
+  ctx.drawImage(src, (w - side) / 2, (h - side) / 2, side, side, 0, 0, S, S);
+  return c.toDataURL('image/jpeg', 0.7);
+}
+
 export function readPhoto(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
-      const S = 96;
-      const c = document.createElement('canvas');
-      c.width = S; c.height = S;
-      const ctx = c.getContext('2d')!;
-      const side = Math.min(img.width, img.height);
-      ctx.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, S, S);
       URL.revokeObjectURL(url);
-      resolve(c.toDataURL('image/jpeg', 0.7));
+      resolve(squarePhoto(img, img.width, img.height));
     };
     img.onerror = reject;
     img.src = url;
@@ -71,3 +77,6 @@ export function groupColor(g: Game, sq: number): string | undefined {
 
 /** discreet version label, e.g. "v1.6.2 · 8ffa863" */
 export const APP_VERSION_TEXT = `v${__APP_VERSION__}${__APP_BUILD__ && __APP_BUILD__ !== 'dev' ? ' · ' + __APP_BUILD__ : ''}`;
+
+/** can this browser show a live camera inside the page? */
+export const canUseCamera = () => typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
