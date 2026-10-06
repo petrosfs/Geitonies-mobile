@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.6.1
+- Online: our own relay (TURN, Metered) is tried first, so players on networks that block direct connections (e.g. different countries) can still play.
+
 ## 1.6.0
 - Online across countries: the free relays PeerJS used to provide no longer exist; replaced with working public STUN servers and the Open Relay TURN service, with a slot for a relay of your own. Longer connection wait and clearer messages (game not found vs. networks blocking the connection).
 - House rule: pass on a free property without starting an auction.

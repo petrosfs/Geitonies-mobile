@@ -10,7 +10,27 @@
 export const TURN_CREDENTIALS_URL = '';
 
 /**
- * Public servers used when no relay of our own is configured.
+ * Our own relay (Metered, workspace "geitonies"). Tried first. The credentials only give access to the
+ * relay; to replace them, create a new credential in the Metered dashboard (TURN Server → Credentials → ICE).
+ */
+const OWN_RELAY_USER = 'd5daf65cf20b8bd6b82f8094';
+const OWN_RELAY_PASS = '0GoOSaI71kWkJJYy';
+const OWN_ICE: RTCIceServer[] = [
+  { urls: 'stun:stun.relay.metered.ca:80' },
+  {
+    urls: [
+      'turn:global.relay.metered.ca:80',
+      'turn:global.relay.metered.ca:80?transport=tcp',
+      'turn:global.relay.metered.ca:443',
+      'turns:global.relay.metered.ca:443?transport=tcp',
+    ],
+    username: OWN_RELAY_USER,
+    credential: OWN_RELAY_PASS,
+  },
+];
+
+/**
+ * Public servers, used as well (after our own relay).
  * - STUN (Google, Cloudflare): lets phones find a direct path to each other.
  * - TURN (Open Relay): a free public relay for when no direct path exists (strict routers, mobile networks,
  *   different countries). Best effort: it has no guarantee; configure your own above for reliability.
@@ -43,9 +63,9 @@ export function loadIceServers(): Promise<void> {
   return loading;
 }
 
-/** options for every new Peer: our relay (if any) first, then the defaults */
+/** options for every new Peer: our relays first, then the public ones */
 export function peerOptions() {
-  return { config: { iceServers: [...extra, ...DEFAULT_ICE] } };
+  return { config: { iceServers: [...extra, ...OWN_ICE, ...DEFAULT_ICE] } };
 }
 
-export const hasOwnRelay = () => extra.length > 0;
+export const hasOwnRelay = () => extra.length > 0 || OWN_ICE.length > 0;
