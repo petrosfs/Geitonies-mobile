@@ -500,10 +500,15 @@ export class Scene3D {
       }
       ctx.fillStyle = '#14212b';
       if (corner) {
-        ctx.font = font(k * 0.55, 400);
-        ctx.fillText(ICON[sq.kind] ?? '', lw / 2, lh * 0.42);
-        ctx.font = font(k * 0.19, 800);
-        ctx.fillText(CORNER_LABEL[sq.kind]?.[this.lang] ?? '', lw / 2, lh * 0.78);
+        // corners: icon and label run diagonally, like on a real board
+        ctx.save();
+        ctx.translate(lw / 2, lh / 2);
+        ctx.rotate(Math.PI / 4);
+        ctx.font = font(k * 0.5, 400);
+        ctx.fillText(ICON[sq.kind] ?? '', 0, -k * 0.16);
+        ctx.font = font(k * 0.2, 800);
+        ctx.fillText(CORNER_LABEL[sq.kind]?.[this.lang] ?? '', 0, k * 0.3);
+        ctx.restore();
       } else if (sq.kind === 'street') {
         ctx.font = font(k * 0.15, 600);
         wrap(ctx, sqName(g, i, this.lang), lw * 0.9, k * 0.17, 3).forEach((line, n, arr) =>
@@ -978,10 +983,42 @@ export class Scene3D {
       const n = Number(a.n) || 0;
       if (!n) continue;
       const p = String(a.p ?? '');
+      if (e.k === 'rent' && Number(a.sq) >= 0) {
+        const owner = g.players.find((x) => x.id === String(a.o));
+        this.flashQueue.push({ sq: Number(a.sq), color: owner?.color ?? '#f4b33d' });
+      }
       if (e.k === 'paid') this.coinQueue.push({ from: this.anchor(p), to: this.anchor(String(a.to)), n });
       else if (e.k === 'salary' || e.k === 'got' || e.k === 'pot') this.coinQueue.push({ from: this.anchor('bank'), to: this.anchor(p), n });
       else if (e.k === 'bought' || e.k === 'won') this.coinQueue.push({ from: this.anchor(p), to: this.anchor('bank'), n });
     }
+  }
+
+  private flashQueue: { sq: number; color: string }[] = [];
+  private flashes: { mesh: THREE.Mesh; start: number }[] = [];
+
+  /** the square someone paid rent on flashes three times in the owner's colour */
+  private stepFlashes(now: number, tokensMoving: boolean) {
+    if (this.flashQueue.length && !tokensMoving && !this.diceAnim && now >= this.holdUntil) {
+      for (const f of this.flashQueue.splice(0)) {
+        const c = rectOf(f.sq, this.s);
+        const m = new THREE.Mesh(
+          new THREE.PlaneGeometry(c.x1 - c.x0, c.z1 - c.z0),
+          new THREE.MeshBasicMaterial({ color: f.color, transparent: true, opacity: 0, depthWrite: false }),
+        );
+        m.rotation.x = -Math.PI / 2;
+        m.position.set((c.x0 + c.x1) / 2 - this.W / 2, 0.012, (c.z0 + c.z1) / 2 - this.W / 2);
+        this.scene.add(m);
+        this.flashes.push({ mesh: m, start: now });
+      }
+    }
+    const dur = 1500;
+    this.flashes = this.flashes.filter((f) => {
+      const k = (now - f.start) / dur;
+      const mat = f.mesh.material as THREE.MeshBasicMaterial;
+      if (k >= 1) { this.scene.remove(f.mesh); f.mesh.geometry.dispose(); mat.dispose(); return false; }
+      mat.opacity = 0.55 * Math.max(0, Math.sin(k * Math.PI * 3)) * (1 - k * 0.4);
+      return true;
+    });
   }
 
   private stepCoins(now: number, tokensMoving: boolean) {
@@ -1026,6 +1063,7 @@ export class Scene3D {
     const moving = this.stepTokens(now);
     const caging = this.stepCages(now);
     this.stepCoins(now, moving || caging);
+    this.stepFlashes(now, moving || caging);
     this.setBusy(rolling || moving || caging);
     // watchdog: no animation may block the game for more than 10 s
     if (this.busy) {

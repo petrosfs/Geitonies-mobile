@@ -38,6 +38,11 @@ export interface State {
   /** chat between phones (online games) */
   chat: ChatMsg[];
   chatSeen: number;
+  /** while joining a new game: keep trying until this time (ms), so a host who stepped out can come back */
+  joinUntil: number;
+  joinStarted: number;
+  /** while joining: no game with this code was found in the last round (wrong code, or the host is away) */
+  joinNotFound: boolean;
   ask: null | { key: string; params?: Record<string, string | number>; yes: string; danger?: boolean; onYes: () => void };
 }
 
@@ -141,6 +146,9 @@ class Store {
       ask: null,
       chat: [],
       chatSeen: 0,
+      joinUntil: 0,
+      joinStarted: 0,
+      joinNotFound: false,
     };
   }
 
@@ -552,11 +560,34 @@ class Store {
 
   // ---------------- networking: client ----------------
 
+  /** how long a new join keeps retrying (the host may be in another app sending the code) */
+  static JOIN_WINDOW = 120_000;
+
   join(code: string) {
     const room = code.trim().toUpperCase();
     if (!room) return;
-    this.set({ room, gen: 0, net: 'connecting' });
+    const now = Date.now();
+    this.set({ room, gen: 0, net: 'connecting', joinStarted: now, joinUntil: now + Store.JOIN_WINDOW, joinNotFound: false });
     void loadIceServers().then(() => this.connectClient(room, 0, false));
+  }
+
+  /** stop trying to join */
+  cancelJoin() {
+    this.teardown();
+    this.set({ net: 'idle', joinUntil: 0, joinStarted: 0 });
+  }
+
+  /** a new join failed this round: try again while the join window lasts */
+  private retryJoin(room: string, reason: 'connectBlocked' | 'connectNotFound' | 'connectFail') {
+    // say straight away when no game answers to this code (most often a typo), while still retrying
+    this.set({ joinNotFound: reason === 'connectNotFound' });
+    if (Date.now() < this.s.joinUntil) {
+      window.clearTimeout(this.retryTimer);
+      this.retryTimer = window.setTimeout(() => this.connectClient(room, 0, false), 4000);
+      return;
+    }
+    this.set({ net: 'error', joinUntil: 0 });
+    this.toast(reason);
   }
 
   /** try host ids gen, gen+1, gen+2 (someone may have taken over) */
@@ -578,9 +609,8 @@ class Store {
           this.markLost();
           this.retryTimer = window.setTimeout(() => this.connectClient(room, this.s.gen, true), 5000);
         } else {
-          this.set({ net: 'error' });
-          // the game was found but no connection could be made: the networks don't allow it
-          this.toast(found ? 'connectBlocked' : 'connectNotFound');
+          // the game was found but no connection could be made (networks), or not found (yet): retry for a while
+          this.retryJoin(room, found ? 'connectBlocked' : 'connectNotFound');
         }
         return;
       }
@@ -598,7 +628,7 @@ class Store {
         found = true;
         this.hostConn = conn;
         this.lastHostMsg = Date.now();
-        this.set({ net: 'ok', gen: target, lostSince: 0 });
+        this.set({ net: 'ok', gen: target, lostSince: 0, joinUntil: 0, joinNotFound: false });
         conn.send({ type: 'hello', device: this.s.device } satisfies Msg);
       });
       conn.on('data', (raw) => this.onClientData(raw as Msg));
@@ -610,6 +640,7 @@ class Store {
     peer.on('error', (err: { type?: string }) => {
       if (err.type === 'peer-unavailable') { current = -1; tryNext(); return; }
       if (this.s.game) { this.onHostLost(); return; }
+      if (!resuming) { this.retryJoin(room, 'connectFail'); return; }
       this.set({ net: 'error' });
       this.toast('connectFail');
     });

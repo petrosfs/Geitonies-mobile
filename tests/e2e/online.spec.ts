@@ -161,5 +161,33 @@ test('@online a wrong code says clearly that no such game exists', async ({ page
   await page.goto('/');
   await page.evaluate(() => { localStorage.clear(); localStorage.setItem('gtn-prefs', JSON.stringify({ device: 'w1', lang: 'el', fx: { gfx: '2d', sound: false, vibrate: false, shake: false, cinema: false } })); });
   await page.goto('/?join=ZZZZ9');
-  await expect(page.locator('.toast')).toContainText('Δεν βρέθηκε παρτίδα', { timeout: 45_000 });
+  // shown straight away, while it keeps trying in case the host is only away for a moment
+  await expect(page.locator('.join-notfound')).toContainText('Δεν βρέθηκε παρτίδα', { timeout: 45_000 });
+  await expect(page.locator('.join-progress')).toBeVisible();
+});
+
+test('@online joining while the host is away for a while (e.g. sending the code): it keeps trying and gets in', async ({ browser }) => {
+  const hostCtx = await browser.newContext();
+  const host = await hostCtx.newPage();
+  const guest = await (await browser.newContext()).newPage();
+  const prefs = (d: string) => JSON.stringify({ device: d, lang: 'el', fx: { gfx: '2d', sound: false, vibrate: false, shake: false, cinema: false } });
+  for (const [p, d] of [[host, 'h4'], [guest, 'g4']] as const) {
+    await p.goto('/');
+    await p.evaluate((v) => { localStorage.clear(); localStorage.setItem('gtn-debug', '1'); localStorage.setItem('gtn-prefs', v); }, prefs(d));
+    await p.reload();
+  }
+  await host.getByText('Νέα online παρτίδα').click();
+  await expect(host.locator('.share .muted').last()).toContainText('Οι άλλοι', { timeout: 30_000 });
+  const code = (await host.locator('.code').innerText()).trim();
+  // the host goes away (no network) while the friend tries to join
+  await hostCtx.setOffline(true);
+  await host.evaluate(() => (window as unknown as { __store: { peer: { socket: { _socket?: WebSocket } } } }).__store.peer.socket._socket?.close());
+  await guest.getByText('Σύνδεση σε παρτίδα').click();
+  await guest.locator('.codein').fill(code);
+  await guest.getByRole('button', { name: 'Σύνδεση', exact: true }).click();
+  await expect(guest.locator('.join-progress')).toBeVisible();
+  await guest.waitForTimeout(40_000);
+  await hostCtx.setOffline(false);
+  // the friend gets in once the host is back
+  await expect(guest.getByText('Προσθήκη παίκτη')).toBeVisible({ timeout: 70_000 });
 });

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.0
+- Computers and tablets: the board fills the left side and the controls sit in a column on the right; dialogs open in the middle of the screen.
+- Joining a game keeps trying for up to 2 minutes (with a timer and a cancel button), so a host who stepped out to send the code can come back; hosts get a reminder to stay on the screen and a “Send the code” button (share sheet).
+- Rent animation: the square flashes in the owner's colour, a cash-register sound plays, and a card shows the amount and who pays whom.
+- Corner squares (Start, Jail, Parking, Go to Jail) have their text running diagonally, like a real board.
+- Animated banners are shown even on devices where animations don't run.
+
 ## 1.6.2
 - The app shows its version discreetly (home screen and ✕ menu), with the build's commit, e.g. “v1.6.2 · 8ffa863”.
 

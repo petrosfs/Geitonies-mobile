@@ -118,6 +118,25 @@ export function PlayersEditor({ players, photos, onChange, canRemoveOthers, show
 
 // ---------------- host share panel ----------------
 
+/** while a join keeps retrying: elapsed time, what to do, and a way out */
+function JoinProgress({ started, notFound }: { started: number; notFound: boolean }) {
+  const { t } = useT();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const i = window.setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(i); }, []);
+  const sec = Math.max(0, Math.round((now - started) / 1000));
+  return (
+    <div className="join-progress" role="status">
+      <div className="spinner" aria-hidden />
+      <div>
+        <strong>{t('joinTrying', { t: `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}` })}</strong>
+        {notFound && <p className="small join-notfound">⚠️ {t('connectNotFound')}</p>}
+        <p className="small muted">{t('joinHint')}</p>
+        <button className="btn ghost small" onClick={() => store.cancelJoin()}>{t('cancel')}</button>
+      </div>
+    </div>
+  );
+}
+
 export function SharePanel({ room }: { room: string }) {
   const { t } = useT();
   const { net } = useStore();
@@ -130,6 +149,14 @@ export function SharePanel({ room }: { room: string }) {
         <div className="muted small">{t('roomCode')}</div>
         <div className="code">{room}</div>
         <div className="muted small">{net === 'ok' ? t('shareHint') : t('connecting')}</div>
+        <button className="btn small share-btn" onClick={async () => {
+          const text = t('shareText', { c: room });
+          try {
+            if (navigator.share) await navigator.share({ title: t('appName'), text, url });
+            else { await navigator.clipboard.writeText(`${text}\n${url}`); store.toast('copied'); }
+          } catch { /* the user closed the share sheet */ }
+        }}>{t('shareCode')}</button>
+        <div className="small host-stay">{t('hostStay')}</div>
       </div>
       {qr && <img className="qr" src={qr} alt="QR" />}
     </div>
@@ -464,6 +491,7 @@ export function JoinScreen() {
         <button className="btn primary wide" disabled={code.length < 5 || s.net === 'connecting'} onClick={() => store.join(code)}>
           {s.net === 'connecting' ? t('connecting') : t('connect')}
         </button>
+        {s.net === 'connecting' && s.joinUntil > 0 && <JoinProgress started={s.joinStarted} notFound={s.joinNotFound} />}
       </main>
     </div>
   );

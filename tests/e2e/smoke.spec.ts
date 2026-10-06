@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { freshStart, newLocalGame, playRolls, watchErrors } from './helpers';
+import { freshStart, newLocalGame, playRolls, step, watchErrors } from './helpers';
 
 test('local game on the 3D board: many turns without errors', async ({ page }) => {
   test.setTimeout(540_000); // software 3D in CI is slow
@@ -179,5 +179,29 @@ test("prices: change a property's price in the setup and buy it at that price", 
   await page.getByText('Έναρξη παιχνιδιού').click();
   const g = await page.evaluate(() => JSON.parse(localStorage.getItem('gtn-save')!).game);
   expect(g.prices).toEqual({ 1: 90 });
+  expect(errors).toEqual([]);
+});
+
+test('landing on someone else\'s property: the rent card', async ({ page }) => {
+  const errors = watchErrors(page);
+  await freshStart(page, { fx: { gfx: '2d', sound: false, vibrate: false, shake: false, cinema: false } });
+  await newLocalGame(page, ['Α', 'Β']);
+  // the other player owns everything
+  await page.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem('gtn-save')!);
+    const g = s.game;
+    const other = g.players[(g.cur + 1) % 2].id;
+    for (const k of Object.keys(g.props)) g.props[k].owner = other;
+    localStorage.setItem('gtn-save', JSON.stringify(s));
+  });
+  await page.reload();
+  await page.getByText('Συνέχεια παρτίδας').click();
+  let seen = false;
+  for (let i = 0; i < 60 && !seen; i++) {
+    if (await page.locator('.rentbanner').count()) { seen = true; break; }
+    await step(page);
+  }
+  expect(seen).toBe(true);
+  await expect(page.locator('.rentbanner .rent-amount')).toContainText('€');
   expect(errors).toEqual([]);
 });

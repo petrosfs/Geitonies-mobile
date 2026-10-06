@@ -122,3 +122,36 @@ export function clank() {
     o.stop(t + 0.4);
   });
 }
+
+/** cash register: a short drawer rattle and a bright double bell ("ka-ching") */
+export function kaching() {
+  if (!ctx || ctx.state !== 'running') return;
+  const t = ctx.currentTime;
+  // drawer rattle
+  const len = Math.floor(ctx.sampleRate * 0.09);
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2);
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass'; bp.frequency.value = 2500; bp.Q.value = 0.8;
+  const ng = ctx.createGain(); ng.gain.value = 0.25;
+  src.connect(bp).connect(ng).connect(ctx.destination);
+  src.start(t);
+  // bells
+  [[1568, 0.08], [2093, 0.17]].forEach(([f, at]) => {
+    [1, 2.76].forEach((h, k) => {
+      const o = ctx!.createOscillator();
+      const g = ctx!.createGain();
+      o.type = 'sine';
+      o.frequency.value = f * h;
+      g.gain.setValueAtTime(0.0001, t + at);
+      g.gain.exponentialRampToValueAtTime(k ? 0.03 : 0.12, t + at + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + at + 0.6);
+      o.connect(g).connect(ctx!.destination);
+      o.start(t + at);
+      o.stop(t + at + 0.65);
+    });
+  });
+}

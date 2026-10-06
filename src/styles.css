@@ -319,18 +319,18 @@ h2 .piece-img { vertical-align: -6px; }
   width: 14px; height: 100%; border-radius: 7px;
   background: linear-gradient(90deg, #2a333a, #6d7a84 45%, #2a333a);
   box-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
-  transform: translateY(-105%); animation: bardrop 0.55s cubic-bezier(.3, 1.4, .5, 1) forwards;
+  animation: bardrop 0.55s cubic-bezier(.3, 1.4, .5, 1) both;
 }
 .jailtext {
   position: relative; background: rgba(14, 22, 30, 0.88); color: #fff; font-weight: 800; font-size: 1.35rem;
   padding: 14px 20px; border-radius: 14px; animation: sirenglow 0.36s steps(1) infinite; text-align: center;
 }
 .siren { display: inline-block; animation: wobble 0.36s ease-in-out infinite alternate; }
-@keyframes bardrop { to { transform: translateY(0); } }
+@keyframes bardrop { from { transform: translateY(-105%); } to { transform: translateY(0); } }
 @keyframes sirenglow { 0% { box-shadow: 0 0 0 4px #e5484d, 0 0 26px #e5484d; } 50% { box-shadow: 0 0 0 4px #0090ff, 0 0 26px #0090ff; } }
 @keyframes wobble { from { transform: rotate(-12deg); } to { transform: rotate(12deg); } }
 @keyframes jailfade { 0%, 85% { opacity: 1; } 100% { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .jailbanner .bars span { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .jailbanner .bars span { animation: none; } }
 
 /* ---------- game over ---------- */
 .awards { list-style: none; padding: 0; margin: 0 0 8px; display: flex; flex-direction: column; gap: 6px; }
@@ -400,3 +400,55 @@ h2 .piece-img { vertical-align: -6px; }
 
 /* discreet version label */
 .app-version { text-align: center; font-size: 0.72rem; opacity: 0.55; margin: 6px 0 0; font-variant-numeric: tabular-nums; }
+
+/* ---------- joining / sharing the code ---------- */
+.join-progress { display: flex; gap: 12px; align-items: flex-start; background: var(--card); border-radius: var(--r); padding: 12px; margin-top: 12px; }
+.join-progress p { margin: 4px 0 8px; }
+.spinner { width: 22px; height: 22px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--sun); animation: spin 0.8s linear infinite; flex: none; margin-top: 2px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.share .share-btn { margin-top: 8px; background: var(--sun); color: var(--ink); min-height: 38px; }
+.share .host-stay { margin-top: 6px; color: #ffe2a3; max-width: 30ch; }
+
+/* ---------- computers and tablets in landscape: board on the left, controls on the right ---------- */
+@media (min-width: 900px) {
+  .screen { max-width: 680px; }
+  .screen.game {
+    max-width: none; height: 100dvh; min-height: 0; overflow: hidden;
+    display: grid; grid-template-columns: minmax(0, 1fr) clamp(340px, 30vw, 440px); grid-template-rows: auto auto minmax(0, 1fr) auto;
+  }
+  .screen.game > .gamebar { grid-column: 1 / -1; grid-row: 1; }
+  .screen.game > .banner { grid-column: 1 / -1; grid-row: 2; }
+  .screen.game > .board3d { grid-column: 1; grid-row: 3 / 5; height: auto; min-height: 0; }
+  .screen.game > .board {
+    grid-column: 1; grid-row: 3 / 5; align-self: center; justify-self: center;
+    width: min(calc(100% - 32px), calc(100dvh - 90px)); margin: 16px;
+  }
+  .screen.game > .actions { grid-column: 2; grid-row: 3; overflow-y: auto; border-left: 1px solid var(--line); padding: 18px 20px; }
+  .screen.game > .dock { grid-column: 2; grid-row: 4; position: static; border-left: 1px solid rgba(255, 255, 255, 0.12); }
+  .screen.game > .jailbanner, .screen.game > .rentbanner { top: 56px; left: 0; right: clamp(340px, 30vw, 440px); height: calc(100dvh - 56px); }
+  .modal-back { align-items: center; }
+  .modal { width: min(560px, 92vw); max-height: 86dvh; border-radius: 18px; }
+  .home { justify-content: center; }
+  .home .hero, .home .menu, .home .langs, .home .install, .home .app-version { width: min(440px, 100%); margin-left: auto; margin-right: auto; }
+}
+
+/* ---------- rent banner ---------- */
+.rentbanner {
+  position: absolute; left: 0; right: 0; top: 52px; height: min(100vw, 56dvh); z-index: 15; pointer-events: none;
+  display: flex; align-items: center; justify-content: center; overflow: hidden; animation: jailfade 2.4s ease-in-out forwards;
+}
+.rentcard {
+  position: relative; background: #fff; border-radius: 16px; border: 4px solid; padding: 12px 22px 14px; text-align: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35); animation: rentpop 0.45s cubic-bezier(.2, 1.6, .4, 1) both;
+}
+.rent-title { font-weight: 800; color: var(--ink-soft); letter-spacing: 0.04em; }
+.rent-amount { font-size: 2.2rem; font-weight: 800; color: var(--alert); line-height: 1.1; margin: 2px 0 6px; }
+.rent-who { display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 700; }
+.rent-who .arrow { color: var(--ink-soft); margin: 0 4px; }
+.rentbanner .coins { position: absolute; inset: 0; }
+.rentbanner .coins span { position: absolute; top: -10%; font-size: 1.6rem; animation: coinfall 1.6s ease-in forwards; }
+/* starts visible: if animations don't run (slow devices), the card is still shown */
+@keyframes rentpop { from { transform: scale(0.75) rotate(-5deg); } }
+@keyframes coinfall { to { transform: translateY(70vh) rotate(540deg); opacity: 0.2; } }
+@media (prefers-reduced-motion: reduce) { .rentcard, .rentbanner .coins span { animation: none; } }
+.join-notfound { color: var(--alert); font-weight: 600; margin: 4px 0; }

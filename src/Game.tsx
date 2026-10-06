@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Board3D } from './Board3D';
 import { RulesSheet } from './Rules';
-import { buzz, hasWebGL, listenShake, requestMotion, siren, unlockAudio } from './fx';
+import { buzz, hasWebGL, kaching, listenShake, requestMotion, siren, unlockAudio } from './fx';
 import { CHAT_MAX, store, TAKEOVER_MS } from './store';
 import {
   bankStock, board, curP, hasMonopoly, netWorth, ownedBy, priceOf, rentFor, sqName, unmortgageCost, waiting,
@@ -57,12 +57,17 @@ export function GameScreen() {
   const seqRef = useRef(g.logSeq ?? 0);
   const [calm, setCalm] = useState(true);
   const [jailQueue, setJailQueue] = useState<string[]>([]);
+  const [rentQueue, setRentQueue] = useState<{ p: string; o: string; n: number; sq: number }[]>([]);
   useEffect(() => {
     const seq = g.logSeq ?? 0;
     const fresh = Math.min(Math.max(0, seq - seqRef.current), g.log.length);
     seqRef.current = seq;
-    const names = g.log.slice(g.log.length - fresh).filter((e) => e.k === 'jailed').map((e) => playerName(g, String(e.a?.p)));
+    const recent = g.log.slice(g.log.length - fresh);
+    const names = recent.filter((e) => e.k === 'jailed').map((e) => playerName(g, String(e.a?.p)));
     if (names.length) { setCalm(() => false); setJailQueue((q) => [...q, ...names]); }
+    const rents = recent.filter((e) => e.k === 'rent' && Number(e.a?.n) > 0)
+      .map((e) => ({ p: String(e.a?.p), o: String(e.a?.o), n: Number(e.a?.n), sq: Number(e.a?.sq) }));
+    if (rents.length) { setCalm(() => false); setRentQueue((q) => [...q, ...rents]); }
   }, [g]);
   // wait until the scene has been calm for a moment (the 3D animation starts one frame after the state changes)
   useEffect(() => {
@@ -71,6 +76,14 @@ export function GameScreen() {
     return () => clearTimeout(id);
   }, [busy, use3d, g.v]);
   const jailNow = calm && !busy ? jailQueue[0] : undefined;
+  const rentNow = calm && !busy && !jailNow ? rentQueue[0] : undefined;
+  useEffect(() => {
+    if (!rentNow) return;
+    if (s.fx.sound) kaching();
+    if (s.fx.vibrate) buzz(40);
+    const id = window.setTimeout(() => setRentQueue((q) => q.slice(1)), 2400);
+    return () => clearTimeout(id);
+  }, [rentNow, rentQueue.length]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!jailNow) return;
     if (!use3d) { if (s.fx.sound) siren(); if (s.fx.vibrate) buzz(60); }
@@ -190,6 +203,26 @@ export function GameScreen() {
           <div className="jailtext"><span className="siren">🚨</span> {t('jailBanner', { p: jailNow })}</div>
         </div>
       )}
+
+      {rentNow && (() => {
+        const payer = g.players.find((x) => x.id === rentNow.p);
+        const owner = g.players.find((x) => x.id === rentNow.o);
+        return (
+          <div className="rentbanner" aria-live="polite">
+            <div className="coins" aria-hidden>{Array.from({ length: 10 }, (_, i) => <span key={i} style={{ left: `${6 + i * 9.5}%`, animationDelay: `${(i % 5) * 90}ms` }}>🪙</span>)}</div>
+            <div className="rentcard" style={{ borderColor: owner?.color }}>
+              <div className="rent-title">🏠 {t('rentTitle')}</div>
+              <div className="rent-amount">{m(rentNow.n)}</div>
+              <div className="rent-who">
+                {payer && <PieceIcon id={payer.emoji} color={payer.color} size={26} />} <span style={{ color: payer?.color }}>{payer?.name}</span>
+                <span className="arrow">→</span>
+                {owner && <PieceIcon id={owner.emoji} color={owner.color} size={26} />} <span style={{ color: owner?.color }}>{owner?.name}</span>
+              </div>
+              <div className="small muted">{sqName(g, rentNow.sq, lang)}</div>
+            </div>
+          </div>
+        );
+      })()}
 
       <section className="actions">
         {busy ? <p className="muted center">🎲 {t('rolling')}</p> : needHandoff ? null : openAuction ? (

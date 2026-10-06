@@ -1,6 +1,6 @@
 {
   "name": "geitonies",
-  "version": "1.6.2",
+  "version": "1.7.0",
   "description": "Real-estate board game for phones: 2–10 players, 3D board, online peer-to-peer play. React + TypeScript + three.js PWA.",
   "homepage": "https://petrosfs.github.io/Geitonies-mobile/",
   "repository": {
