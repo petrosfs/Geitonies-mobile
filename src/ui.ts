@@ -68,3 +68,6 @@ export function groupColor(g: Game, sq: number): string | undefined {
   const s = board(g).squares[sq];
   return s.group !== undefined ? board(g).groups[s.group].color : undefined;
 }
+
+/** discreet version label, e.g. "v1.6.2 · 8ffa863" */
+export const APP_VERSION_TEXT = `v${__APP_VERSION__}${__APP_BUILD__ && __APP_BUILD__ !== 'dev' ? ' · ' + __APP_BUILD__ : ''}`;

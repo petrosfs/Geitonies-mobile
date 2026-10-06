@@ -8,7 +8,7 @@ import {
 } from './game/engine';
 import type { Game, Offer, Pending, Player, Trade } from './game/types';
 import { BoardView, Die } from './Board';
-import { cardText, groupColor, logText, playerName, useStore, useT } from './ui';
+import { APP_VERSION_TEXT, cardText, groupColor, logText, playerName, useStore, useT } from './ui';
 import { Avatar, Modal, PieceIcon } from './components';
 import { pieceText } from './three/pieces';
 
@@ -259,6 +259,7 @@ export function GameScreen() {
               onYes: () => store.deleteGame(),
             })}>{t('deleteGame')}</button>
           )}
+          <p className="app-version">{APP_VERSION_TEXT}</p>
         </Modal>
       )}
       {showRules && <RulesSheet g={g} onClose={() => setShowRules(false)} />}

@@ -1,9 +1,18 @@
+import { readFileSync } from 'node:fs';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 // base './' so the app works from any folder (e.g. GitHub Pages /repo-name/)
+
+// version shown in the app (home screen and ✕ menu)
+const APP_DEFINES = {
+  __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version),
+  __APP_BUILD__: JSON.stringify((process.env.GITHUB_SHA ?? 'dev').slice(0, 7)),
+};
+
 export default defineConfig({
+  define: APP_DEFINES,
   base: './',
   plugins: [
     react(),

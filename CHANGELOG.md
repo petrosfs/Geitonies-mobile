@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.6.2
+- The app shows its version discreetly (home screen and ✕ menu), with the build's commit, e.g. “v1.6.2 · 8ffa863”.
+
 ## 1.6.1
 - Online: our own relay (TURN, Metered) is tried first, so players on networks that block direct connections (e.g. different countries) can still play.
 

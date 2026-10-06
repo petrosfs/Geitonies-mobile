@@ -3,7 +3,7 @@ import { store } from './store';
 import { Die } from './Board';
 import { GameScreen } from './Game';
 import { JoinScreen, LobbyScreen, SetupScreen } from './Setup';
-import { useStore, useT } from './ui';
+import { APP_VERSION_TEXT, useStore, useT } from './ui';
 import { Modal } from './components';
 import { RulesSheet } from './Rules';
 
@@ -35,6 +35,7 @@ function Home() {
         <button className={s.lang === 'en' ? 'on' : ''} onClick={() => store.setLang('en')}>English</button>
       </div>
       {!PREVIEW && <p className="muted small center install">{t('installHint')}</p>}
+      <p className="app-version">{APP_VERSION_TEXT}</p>
     </div>
   );
 }
