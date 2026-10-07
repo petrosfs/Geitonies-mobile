@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import QRCode from 'qrcode';
 import { store } from './store';
 import { hasWebGL, requestMotion } from './fx';
 import { BOARDS } from './game/boards';
@@ -12,8 +11,8 @@ import { customRuleText, wealthTaxText } from './upsets-text';
 import { canUseCamera, COLORS, EMOJIS, readPhoto, useStore, useT } from './ui';
 import { Avatar, PieceIcon } from './components';
 import { CameraSheet } from './Camera';
-import { pieceText } from './three/pieces';
-import { ContrastPicker, LightPicker, VersionWarning } from './Game';
+import { pieceText } from './three/piece-list';
+import { ContrastPicker, LightPicker, QualityPicker, VersionWarning } from './Game';
 
 const newId = () => Math.random().toString(36).slice(2, 10);
 
@@ -174,7 +173,7 @@ export function SharePanel({ room }: { room: string }) {
   const { net } = useStore();
   const [qr, setQr] = useState('');
   const url = `${location.origin}${location.pathname}?join=${room}`;
-  useEffect(() => { QRCode.toDataURL(url, { margin: 1, width: 220 }).then(setQr).catch(() => setQr('')); }, [url]);
+  useEffect(() => { import('qrcode').then((m) => m.default.toDataURL(url, { margin: 1, width: 220 })).then(setQr).catch(() => setQr('')); }, [url]);
   return (
     <div className="share">
       <div>
@@ -848,6 +847,7 @@ export function DeviceSettings() {
       
       <LightPicker />
       <ContrastPicker />
+      <QualityPicker />
       <label className="check"><input type="checkbox" checked={fx.cinema} onChange={(e) => store.setFx({ cinema: e.target.checked })} />{t('fxCinema')}</label>
       <label className="check"><input type="checkbox" checked={fx.sound} onChange={(e) => store.setFx({ sound: e.target.checked })} />{t('fxSound')}</label>
       <label className="check"><input type="checkbox" checked={fx.vibrate} onChange={(e) => store.setFx({ vibrate: e.target.checked })} />{t('fxVibrate')}</label>

@@ -1,3 +1,4 @@
+import { cleanQuality, type GfxLevel, type GfxQuality } from './three/quality';
 import Peer, { type DataConnection } from 'peerjs';
 import { receiveFramed, sendFramed } from './net/frame';
 import { netlog } from './net/netlog';
@@ -12,7 +13,7 @@ export type Net = 'idle' | 'connecting' | 'ok' | 'lost' | 'error';
 
 /** settings of this device only */
 export type BoardLight = 'normal' | 'dim' | 'night';
-export interface Fx { gfx: '3d' | '2d'; sound: boolean; vibrate: boolean; shake: boolean; cinema: boolean; light: BoardLight; /** board contrast in percent (100 = as designed) */ contrast: number }
+export interface Fx { gfx: '3d' | '2d'; sound: boolean; vibrate: boolean; shake: boolean; cinema: boolean; light: BoardLight; /** board contrast in percent (100 = as designed) */ contrast: number; /** 3D graphics quality */ quality: GfxQuality }
 
 export interface ChatMsg { id: string; from: string; text: string; t: number }
 export const CHAT_MAX = 200;
@@ -34,6 +35,8 @@ export interface State {
   net: Net;
   lostSince: number;
   toast: string | null;
+  /** the 3D graphics level in use right now (in 'auto' it can drop by itself) */
+  gfxNow?: GfxLevel;
   kicked: boolean;
   hasSave: boolean;
   /** in-app confirmation dialog (browser confirm() is blocked in some embeds) */
@@ -117,7 +120,7 @@ export function clampContrast(v: unknown): number {
   return Number.isFinite(n) ? Math.min(CONTRAST_MAX, Math.max(CONTRAST_MIN, n)) : 100;
 }
 
-const DEFAULT_FX: Fx = { gfx: '3d', sound: true, vibrate: true, shake: true, cinema: true, light: 'normal', contrast: 100 };
+const DEFAULT_FX: Fx = { gfx: '3d', sound: true, vibrate: true, shake: true, cinema: true, light: 'normal', contrast: 100, quality: 'auto' };
 
 function loadPrefs(): { lang: Lang; device: string; fx: Fx } {
   try {
@@ -126,6 +129,7 @@ function loadPrefs(): { lang: Lang; device: string; fx: Fx } {
       const fx = { ...DEFAULT_FX, ...(p.fx ?? {}) };
       if (!['normal', 'dim', 'night'].includes(fx.light)) fx.light = 'normal';
       fx.contrast = clampContrast(fx.contrast);
+      fx.quality = cleanQuality(fx.quality);
       return { lang: p.lang === 'en' ? 'en' : 'el', device: p.device, fx };
     }
   } catch { /* ignore */ }
@@ -197,6 +201,8 @@ class Store {
   }
 
   /** show a message: a translation key, or raw text starting with '#' */
+  setGfxNow(l: GfxLevel) { if (this.s.gfxNow !== l) this.set({ gfxNow: l }); }
+
   toast(key: string | null) {
     this.set({ toast: key });
     if (key) window.setTimeout(() => { if (this.s.toast === key) this.set({ toast: null }); }, key.startsWith('#') ? 4500 : 3200);

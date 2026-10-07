@@ -92,6 +92,7 @@ test('end of game: statistics, then a rematch with the same players', async ({ p
   });
   await page.reload();
   await page.getByText('Συνέχεια παρτίδας').click();
+  await expect(page.locator('.gamebar')).toBeVisible(); // the game screen is open (its code may arrive a moment later)
   // two players are left after this bankruptcy, so force a second one
   for (let k = 0; k < 2; k++) {
     if (await page.locator('.handoff .btn').count()) await page.locator('.handoff .btn').click();
@@ -108,6 +109,7 @@ test('end of game: statistics, then a rematch with the same players', async ({ p
       });
       await page.reload();
       await page.getByText('Συνέχεια παρτίδας').click();
+      await expect(page.locator('.gamebar')).toBeVisible();
     }
   }
   await expect(page.getByText('Τέλος παιχνιδιού')).toBeVisible();
@@ -256,6 +258,46 @@ test('upsets: wealth tax with its options and a custom rule, in the setup and in
   await expect(page.locator('.rules-game')).toContainText('Φόρος πλούτου: κάθε 3 γύρους');
   await expect(page.locator('.rules-game')).toContainText('Δημοτικά τέλη');
   expect(errors).toEqual([]);
+});
+
+test('graphics quality: the setting changes the 3D board, and auto shows the level in use', async ({ page }) => {
+  const errors = watchErrors(page);
+  await freshStart(page, { fx: { gfx: '3d', sound: false, vibrate: false, shake: false, cinema: false, quality: 'auto' } });
+  await page.evaluate(() => localStorage.setItem('gtn-debug', '1'));
+  await page.reload();
+  await newLocalGame(page, ['Α', 'Β']);
+  await page.locator('button', { hasText: '✕' }).first().click();
+  await expect(page.getByText('Ποιότητα γραφικών')).toBeVisible();
+  await expect(page.getByText(/τώρα: (Υψηλή|Μέτρια|Χαμηλή)/)).toBeVisible();
+  const look = () => page.evaluate(() => {
+    const sc = (window as unknown as { __scene: { renderer: { getPixelRatio(): number }; sunLight: { castShadow: boolean }; boardCanvas: HTMLCanvasElement } }).__scene;
+    return { dpr: sc.renderer.getPixelRatio(), shadows: sc.sunLight.castShadow, tex: sc.boardCanvas.width };
+  });
+  const q = page.locator('.field', { hasText: 'Ποιότητα γραφικών' });
+  await q.getByRole('button', { name: 'Χαμηλή', exact: true }).click();
+  await expect.poll(look).toEqual({ dpr: 1, shadows: false, tex: 2048 });
+  expect((await page.evaluate(() => JSON.parse(localStorage.getItem('gtn-prefs')!).fx)).quality).toBe('low');
+  await q.getByRole('button', { name: 'Υψηλή', exact: true }).click();
+  await expect.poll(async () => (await look()).shadows).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test('a piece of the app fails to load: one reload by itself, then a message (no blank page)', async ({ browser }) => {
+  const ctx = await browser.newContext({ serviceWorkers: 'block', locale: 'el-GR' });
+  const page = await ctx.newPage();
+  await page.route(/\/assets\/Setup-[^/]*\.js$/, (r) => r.abort());
+  let loads = 0;
+  page.on('load', () => { loads++; });
+  await page.goto('/');
+  await page.getByText('Νέα παρτίδα σε αυτό το κινητό').click();
+  await expect(page.getByText(/Ένα κομμάτι της εφαρμογής δεν φόρτωσε/)).toBeVisible({ timeout: 20000 });
+  expect(loads).toBeLessThanOrEqual(2); // at most one automatic reload, never a loop
+  // the connection is back: the button brings the app back
+  await page.unroute(/\/assets\/Setup-[^/]*\.js$/);
+  await page.getByRole('button', { name: 'Επαναφόρτωση' }).click();
+  await page.getByText('Νέα παρτίδα σε αυτό το κινητό').click();
+  await expect(page.getByText('Προσθήκη παίκτη')).toBeVisible();
+  await ctx.close();
 });
 
 test('landing on someone else\'s property: the rent card', async ({ page }) => {

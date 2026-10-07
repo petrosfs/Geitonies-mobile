@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Scene3D } from './three/scene';
 import type { Game } from './game/types';
 import { useStore, useT } from './ui';
+import { store } from './store';
 
 export function Board3D(props: Parameters<typeof Board3DInner>[0]) {
   // if the phone drops the 3D context, start a fresh scene
@@ -30,7 +31,9 @@ function Board3DInner({ g, onSquare, onBusy, overlay, onLost }: {
       onBusy: (b) => cb.current.onBusy(b),
       onFollow: setFollow,
       onLost: () => cb.current.onLost?.(),
+      onQuality: (l) => store.setGfxNow(l),
     });
+    sc.setQuality(store.get().fx.quality ?? 'auto');
     sceneRef.current = sc;
     // redraw text once the web font is ready
     document.fonts?.ready.then(() => { sceneRef.current?.update({ ...g }, s.lang, s.photos); });
@@ -41,6 +44,7 @@ function Board3DInner({ g, onSquare, onBusy, overlay, onLost }: {
   useEffect(() => { sceneRef.current?.update(g, s.lang, s.photos); }, [g, s.lang, s.photos]);
   useEffect(() => { sceneRef.current?.setFx(s.fx.sound, s.fx.vibrate, s.fx.cinema); }, [s.fx.sound, s.fx.vibrate, s.fx.cinema]);
   useEffect(() => { sceneRef.current?.setLight(s.fx.light ?? 'normal'); }, [s.fx.light]);
+  useEffect(() => { sceneRef.current?.setQuality(s.fx.quality ?? 'auto'); }, [s.fx.quality]);
 
   return (
     <div className="board3d">

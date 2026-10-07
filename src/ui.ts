@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { store } from './store';
 import { money as fmtMoney, tr } from './i18n';
 import { board, sqName } from './game/engine';
-import { PIECES } from './three/pieces';
+import { PIECES } from './three/piece-list';
 import type { Card, Game, LogEntry } from './game/types';
 import { ruleTitle } from './upsets-text';
 

@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Board3D } from './Board3D';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { Board3D } from './board3d-lazy';
 import { RulesSheet } from './Rules';
 import { boardEvents, isUpset, turnCard, type BoardEvent } from './events';
 import { ruleTitle } from './upsets-text';
+import { GFX_QUALITIES } from './three/quality';
 import { ReportSheet } from './Report';
 import { buzz, chime, fanfare, hasWebGL, kaching, listenShake, requestMotion, siren, taxSound, unlockAudio } from './fx';
 import { CHAT_MAX, clampContrast, CONTRAST_MAX, CONTRAST_MIN, MANUAL_TAKEOVER_MS, store, TAKEOVER_MS } from './store';
@@ -13,7 +14,7 @@ import type { Game, Offer, Pending, Player, Trade, PlayerSetup } from './game/ty
 import { BoardView, Die } from './Board';
 import { APP_VERSION_TEXT, cardText, groupColor, logText, playerName, useStore, useT } from './ui';
 import { Avatar, Modal, PieceIcon } from './components';
-import { pieceText } from './three/pieces';
+import { pieceText } from './three/piece-list';
 
 type Sheet = 'none' | 'props' | 'players' | 'trade' | 'log' | 'chat';
 type Auction = Extract<Pending, { k: 'auction' }>;
@@ -205,6 +206,7 @@ export function GameScreen() {
       )}
 
       {use3d ? (
+        <Suspense fallback={<div className="board3d" />}>
         <Board3D g={g} onSquare={setInfo} onBusy={(b) => { setBusy(b); if (b) setCalm(false); else setSeenRolls(rollsRef.current); }} overlay={
           <div className="b3-overlay">
             <div className="turnline" style={{ color: cur.color }}>
@@ -219,6 +221,7 @@ export function GameScreen() {
             <TurnCard g={g} />
           </div>
         } />
+        </Suspense>
       ) : (
         <BoardView g={g} onSquare={setInfo} center={center} />
       )}
@@ -290,6 +293,7 @@ export function GameScreen() {
           <button className="btn wide" onClick={() => { setMenu(false); setShowRules(true); }}>📖 {t('rules')}</button>
           <LightPicker />
           <ContrastPicker />
+          <QualityPicker />
           <button className="btn wide ghost" onClick={() => { setMenu(false); setShowReport(true); }}>🛠️ {t('report')}</button>
           {s.mode !== 'local' && (
             <button className="btn wide" onClick={() => { store.reconnect(); setMenu(false); }}>🔄 {t('reconnect')}</button>
@@ -835,6 +839,23 @@ export function LightPicker() {
       <div className="seg">
         {(['normal', 'dim', 'night'] as const).map((l) => (
           <button key={l} className={cur === l ? 'on' : ''} onClick={() => store.setFx({ light: l })}>{t('light_' + l)}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function QualityPicker() {
+  const { t } = useT();
+  const s = useStore();
+  if (s.fx.gfx !== '3d') return null;
+  const cur = s.fx.quality ?? 'auto';
+  return (
+    <div className="field">
+      <span>🖥️ {t('gfxQuality')}{cur === 'auto' && s.gfxNow ? <span className="muted small"> · {t('gfxNow', { l: t('q_' + s.gfxNow) })}</span> : null}</span>
+      <div className="seg">
+        {GFX_QUALITIES.map((q) => (
+          <button key={q} className={cur === q ? 'on' : ''} onClick={() => store.setFx({ quality: q })}>{t('q_' + q)}</button>
         ))}
       </div>
     </div>

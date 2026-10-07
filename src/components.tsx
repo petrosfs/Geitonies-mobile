@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import { pieceText } from './three/pieces';
-import { pieceThumb } from './three/thumbs';
+import { pieceText } from './three/piece-list';
+import { useThumbs } from './thumbs-loader';
 
 /* Small shared UI components. Hooks and helpers live in ./ui.ts */
 
@@ -8,7 +8,9 @@ import { pieceThumb } from './three/thumbs';
 export function PieceIcon({ id, color, size = 20 }: { id: string; color: string; size?: number }) {
   // render at twice the displayed size (sharp on phone screens); few sizes, so the cache stays small
   const px = size > 100 ? 320 : size > 56 ? 192 : 128;
-  const src = pieceThumb(id, color, px);
+  const th = useThumbs();
+  if (!th) return <span className="piece-img" style={{ display: 'inline-block', width: size, height: size }} />;
+  const src = th.pieceThumb(id, color, px);
   if (!src) return <span className="piece-txt" style={{ fontSize: size * 0.85 }}>{pieceText(id)}</span>;
   return <img className="piece-img" src={src} alt="" width={size} height={size} />;
 }

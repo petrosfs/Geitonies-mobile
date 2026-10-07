@@ -8,6 +8,7 @@ import type { Game, Lang } from '../game/types';
 import { buzz, clack, clank, siren, tick } from '../fx';
 import { buildPiece, GLIDERS, PIECE_HEIGHT } from './pieces';
 import { faceValues, simulateDice } from './dice';
+import { LEVELS, lower, MIN_FRAMES, PAUSE_MS, struggling, WINDOW_MS, type GfxLevel, type GfxQuality } from './quality';
 
 type Side = 'b' | 'l' | 't' | 'r';
 export type BoardLight = 'normal' | 'dim' | 'night';
@@ -49,6 +50,8 @@ export interface SceneEvents {
   onBusy: (busy: boolean) => void;
   onFollow: (follow: boolean) => void;
   onLost?: () => void;
+  /** the graphics level now in use (it can drop by itself in 'auto') */
+  onQuality?: (level: GfxLevel) => void;
 }
 
 interface TokenState {
@@ -154,7 +157,8 @@ export class Scene3D {
     const maxTex = this.renderer.capabilities.maxTextureSize;
     const mem = (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 4;
     const roomy = window.matchMedia?.('(min-width: 900px) and (pointer: fine)').matches && mem >= 4;
-    this.boardCanvas.width = this.boardCanvas.height = maxTex >= 8192 && roomy ? 4096 : maxTex >= 4096 && mem >= 2 ? 3072 : 2048;
+    this.devTex = maxTex >= 8192 && roomy ? 4096 : maxTex >= 4096 && mem >= 2 ? 3072 : 2048;
+    this.boardCanvas.width = this.boardCanvas.height = this.devTex;
     this.boardTex = new THREE.CanvasTexture(this.boardCanvas);
     this.boardTex.colorSpace = THREE.SRGBColorSpace;
     this.boardTex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
@@ -197,6 +201,68 @@ export class Scene3D {
 
   private sunLight: THREE.DirectionalLight;
   private hemiLight!: THREE.HemisphereLight;
+
+  // ---------------- graphics quality ----------------
+
+  /** the biggest board picture this device should get */
+  private devTex = 2048;
+  private level: GfxLevel = 'high';
+  private autoQ = true;
+  /** time between frames over the current measuring window; paused while settling after a change */
+  private gaps: number[] = [];
+  private lastFrameAt = 0;
+  private winStart = 0;
+  private settleUntil = 0;
+  private stepDown = false;
+
+  /** 'auto' (start at the top, step down if the board can't keep up) or a fixed level */
+  setQuality(q: GfxQuality) {
+    const auto = q === 'auto';
+    const target: GfxLevel = auto ? (this.autoQ ? this.level : 'high') : q;
+    this.autoQ = auto;
+    this.applyLevel(target, true);
+  }
+
+  private applyLevel(l: GfxLevel, force = false) {
+    if (l === this.level && !force) return;
+    this.level = l;
+    const L = LEVELS[l];
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, L.dpr));
+    this.resize();
+    const sun = this.sunLight;
+    sun.castShadow = L.shadows;
+    if (sun.shadow.mapSize.x !== L.shadowMap) {
+      sun.shadow.mapSize.set(L.shadowMap, L.shadowMap);
+      sun.shadow.map?.dispose();
+      sun.shadow.map = null;
+    }
+    const tex = Math.min(this.devTex, L.tex);
+    if (this.boardCanvas.width !== tex) {
+      this.boardCanvas.width = this.boardCanvas.height = tex;
+      this.boardTex.dispose(); // new size: the picture is uploaded again
+      if (this.g) { this.texKey = ''; this.drawBoard(); }
+      this.boardTex.needsUpdate = true;
+    }
+    this.gaps = []; this.winStart = 0; this.stepDown = false;
+    this.settleUntil = performance.now() + 2000;
+    this.ev.onQuality?.(l);
+  }
+
+  /** auto quality: watch the frame rate; step down only between animations, so no move is cut short */
+  private watchFrames(now: number) {
+    const gap = now - this.lastFrameAt;
+    this.lastFrameAt = now;
+    if (this.stepDown && !this.busy) { this.applyLevel(lower(this.level)); return; }
+    if (!this.autoQ || this.level === 'low' || this.stepDown) return;
+    // a very long gap: the tab was hidden or the phone paused us; that's not slowness
+    if (gap > PAUSE_MS || document.hidden) { this.gaps = []; this.winStart = 0; return; }
+    if (now < this.settleUntil) return;
+    if (!this.winStart) { this.winStart = now; this.gaps = []; return; }
+    this.gaps.push(gap);
+    if (now - this.winStart < WINDOW_MS || this.gaps.length < MIN_FRAMES) return;
+    if (struggling(this.gaps)) this.stepDown = true;
+    this.gaps = []; this.winStart = 0;
+  }
   private boardBase: THREE.Object3D[] = [];
 
   // ---------------- setup per board size ----------------
@@ -1075,6 +1141,7 @@ export class Scene3D {
 
   private frame() {
     const now = performance.now();
+    this.watchFrames(now);
     const rolling = this.stepDice(now);
     const moving = this.stepTokens(now);
     const caging = this.stepCages(now);

@@ -505,3 +505,9 @@ fieldset.readonly :is(input, select, textarea, button) { opacity: 0.75; cursor: 
 .ev-quake .rentcard { animation: quakeshake 0.5s ease-in-out 2; }
 @keyframes quakeshake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-6px) rotate(-1deg); } 40% { transform: translateX(6px) rotate(1deg); } 60% { transform: translateX(-4px); } 80% { transform: translateX(4px); } }
 @media (prefers-reduced-motion: reduce) { .ev-quake .rentcard { animation: none; } }
+
+/* while a screen's code is still arriving (first visit, slow network) */
+.loading-screen { background: var(--bg, #0f3b5f); }
+.loading-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--sun, #f4b33d); animation: loadpulse 0.9s ease-in-out infinite alternate; }
+@keyframes loadpulse { from { opacity: 0.25; transform: scale(0.8); } to { opacity: 1; transform: scale(1.2); } }
+@media (prefers-reduced-motion: reduce) { .loading-dot { animation: none; } }

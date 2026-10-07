@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.12.0
+- Faster first visit: the app comes in pieces. The home screen needs about a third of the code (131 KB instead of 362 KB compressed) and appears ~45 % sooner on a slow mobile connection; the setup, the game, the 3D board, the rules and the QR code are fetched in the background right after. Once the app is installed (or after the first visit) nothing changes.
+- Graphics quality for the 3D board (✕ menu and device settings): Auto, High, Medium, Low. Auto starts at High and steps down by itself only if the board can't keep a smooth frame rate, and only between animations, so no move is cut short. A screen locked at 30 fps (battery saver) is not taken as slowness.
+- If a piece of the app can't be fetched (offline before it was saved, or a new version came out while it was open), the app reloads once by itself; if that doesn't help, a message with a Reload button instead of a blank page. The game is saved either way.
+
 ## 1.11.0
 - Upsets (optional, in the setup's rules tab), so a game isn't decided early:
   - **Wealth tax:** every N rounds the richest player — or everyone above the average — pays a chosen % of their net worth (to Free Parking if it's on, else to the bank).

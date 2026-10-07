@@ -46,6 +46,8 @@ The same engine runs in every mode. Only *who* calls it changes:
 - `Scene3D` (three.js) owns the renderer, board texture (drawn on a canvas, re-drawn only when names/owners change), buildings, tokens, dice, coins and camera.
 - **Dice:** the engine decides the numbers; `simulateDice` pre-computes the whole throw with cannon-es using a fixed time step, settles the dice flat and apart, and reports which face ended on top so that face can be painted with the rolled value. Playback is time-based, so slow devices skip frames instead of slowing down.
 - **Camera:** follows the current player; after a roll it chases the moving piece, then returns to the overview. Any touch hands control to the player until the 🎯 button is pressed.
+- **Quality:** `setQuality` sets the pixel ratio, shadows and board-picture size (High / Medium / Low). In Auto, the frame times are measured in 3-second windows; uneven frames under 40 fps (or anything under 27 fps) step the level down once the current animation has finished. A steady 30 fps (screen or battery-saver limit) is not counted as slowness. It never steps back up by itself. → `src/three/quality.ts`
+- **Loading:** the 3D board is its own code piece (`board3d-lazy.ts`); screens use `preloadable` (`src/lazy.ts`), which renders directly once the code is there and only falls back to React.lazy if opened earlier. A failed fetch reloads once (guarded against loops), then shows a message.
 - **Safety:** a watchdog ends any animation after 10 s, errors inside the render loop jump to the final state, and a lost WebGL context rebuilds the scene.
 
 ## Testing
