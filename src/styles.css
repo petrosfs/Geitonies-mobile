@@ -493,3 +493,15 @@ fieldset.readonly :is(input, select, textarea, button) { opacity: 0.75; cursor: 
 .center-in .turncard { margin: 4px auto; max-width: 92%; }
 @keyframes tcin { from { transform: translateY(-6px); opacity: 0; } }
 .reset-row { flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+
+/* upset rules (setup) */
+.upset-opts { margin: 4px 0 10px 28px; display: flex; flex-direction: column; gap: 8px; }
+.upset-opts .row { flex-wrap: wrap; gap: 8px; }
+.upset-opts .row .field { flex: 1; min-width: 110px; }
+.minicard.rulecard { border-top-color: #8e4ec6; }
+.rule-draft { display: flex; flex-direction: column; gap: 8px; }
+.rule-preview { background: var(--card); border-radius: var(--r); padding: 8px 10px; border-left: 4px solid #8e4ec6; margin: 0; }
+.rent-words { font-weight: 700; font-size: 1.05rem; margin: 6px 0; max-width: 280px; }
+.ev-quake .rentcard { animation: quakeshake 0.5s ease-in-out 2; }
+@keyframes quakeshake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-6px) rotate(-1deg); } 40% { transform: translateX(6px) rotate(1deg); } 60% { transform: translateX(-4px); } 80% { transform: translateX(4px); } }
+@media (prefers-reduced-motion: reduce) { .ev-quake .rentcard { animation: none; } }

@@ -93,6 +93,30 @@ describe('engine', () => {
     expect(finished).toBeGreaterThan(10);
   }, 300000);
 
+  it('plays random games with every upset rule on without breaking invariants', () => {
+    let finished = 0;
+    for (let s = 101; s <= 120; s++) {
+      const boardId: BoardId = s % 2 ? 'classic' : 'large';
+      const g = play(s, 2 + (s % 5), boardId, {
+        auction: 'open', freeParking: s % 2 === 0,
+        wealthTax: { every: 2 + (s % 3), pct: 5 + (s % 4) * 5, who: s % 2 ? 'leader' : 'above' },
+        underdog: true,
+        crisis: { every: 3, house: 25, hotel: 100 },
+        quake: { every: 4 },
+        custom: [
+          { text: 'a', when: { t: 'land', sq: 10 }, who: 'leader', what: { t: 'pct', pct: 5 } },
+          { text: 'b', when: { t: 'go' }, who: 'last', what: { t: 'money', amount: 100 } },
+          { text: 'c', when: { t: 'rounds', n: 5 }, who: 'all', what: { t: 'loseHouse' } },
+          { text: 'd', when: { t: 'land', sq: 7 }, who: 'self', what: { t: 'jail' } },
+          { text: 'e', when: { t: 'rounds', n: 6 }, who: 'self', what: { t: 'repairs', house: 40, hotel: 115 } },
+        ],
+      });
+      if (g.over) finished++;
+    }
+    console.log('finished games with upsets:', finished, '/ 20');
+    expect(finished).toBeGreaterThan(3);
+  }, 300000);
+
   it('boards have the planned sizes', () => {
     const c = newGame(setup(2, 'classic'), 1, 0);
     const l = newGame(setup(8, 'large'), 1, 0);

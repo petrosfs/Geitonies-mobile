@@ -64,7 +64,33 @@ export interface Rules {
   autoMoveSec: number;
   /** starting money for every player (default: the board's) */
   startCash?: number;
+  /** upset rules (all optional; missing = off) */
+  wealthTax?: WealthTax;
+  /** the poorest player gets double salary at Start */
+  underdog?: boolean;
+  crisis?: Crisis;
+  quake?: Quake;
+  /** rules the players made up: when -> who -> what */
+  custom?: CustomRule[];
 }
+
+/** every `every` rounds, the leader (or everyone above the average) pays `pct` % of their net worth */
+export interface WealthTax { every: number; pct: number; who: 'leader' | 'above' }
+/** every `every` rounds, everyone pays maintenance per house and per hotel */
+export interface Crisis { every: number; house: number; hotel: number }
+/** every `every` rounds, one colour group with buildings loses a house on each street (half the price back) */
+export interface Quake { every: number }
+
+export type RuleWhen = { t: 'rounds'; n: number } | { t: 'go' } | { t: 'land'; sq: number };
+/** self = the player who triggered it (for 'rounds': the one whose turn starts) */
+export type RuleWho = 'self' | 'all' | 'leader' | 'last';
+export type RuleDo =
+  | { t: 'money'; amount: number } // + from the bank, - to the fees
+  | { t: 'pct'; pct: number } // pays this % of net worth
+  | { t: 'repairs'; house: number; hotel: number }
+  | { t: 'jail' }
+  | { t: 'loseHouse' };
+export interface CustomRule { text: string; when: RuleWhen; who: RuleWho; what: RuleDo }
 
 export interface Player {
   id: string;

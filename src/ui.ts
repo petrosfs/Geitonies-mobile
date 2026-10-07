@@ -4,6 +4,7 @@ import { money as fmtMoney, tr } from './i18n';
 import { board, sqName } from './game/engine';
 import { PIECES } from './three/pieces';
 import type { Card, Game, LogEntry } from './game/types';
+import { ruleTitle } from './upsets-text';
 
 export function useStore() {
   return useSyncExternalStore(store.subscribe, store.get);
@@ -50,7 +51,7 @@ export function playerName(g: Game, id: string) {
   return g.players.find((p) => p.id === id)?.name ?? id;
 }
 
-const MONEY_KEYS = new Set(['paid', 'debt', 'rent', 'tax', 'pot', 'bought', 'bid', 'won', 'got', 'salary']);
+const MONEY_KEYS = new Set(['paid', 'debt', 'rent', 'tax', 'pot', 'bought', 'bid', 'won', 'got', 'salary', 'wealthTax']);
 
 export function logText(g: Game, e: LogEntry, lang: 'el' | 'en'): string {
   const a: Record<string, string | number> = {};
@@ -63,6 +64,9 @@ export function logText(g: Game, e: LogEntry, lang: 'el' | 'en'): string {
       const c = g.cards[Number(v)];
       a.c = c ? cardText(g, c, lang) : '';
       a.d = c ? tr(lang, 'cardTitle_' + c.deck) : '';
+    } else if (k === 'r' && e.k === 'rule') {
+      const r = g.rules.custom?.[Number(v)];
+      a.r = r ? ruleTitle(lang, r, (sq) => sqName(g, sq, lang)) : '';
     } else a[k] = v;
   }
   return tr(lang, 'l_' + e.k, a);

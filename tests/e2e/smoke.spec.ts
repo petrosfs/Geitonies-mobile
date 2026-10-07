@@ -222,6 +222,42 @@ test('board contrast: the slider in the game menu, saved and applied', async ({ 
   expect(errors).toEqual([]);
 });
 
+test('upsets: wealth tax with its options and a custom rule, in the setup and in the game', async ({ page }) => {
+  const errors = watchErrors(page);
+  await freshStart(page, { fx: { gfx: '2d', sound: false, vibrate: false, shake: false, cinema: false } });
+  await page.getByText('Νέα παρτίδα σε αυτό το κινητό').click();
+  for (const n of ['Α', 'Β']) {
+    await page.getByText('Προσθήκη παίκτη').click();
+    await page.locator('.pedit input').first().fill(n);
+  }
+  await page.locator('nav.tabs button', { hasText: 'Κανόνες' }).click();
+  await page.getByLabel('Φόρος πλούτου').check();
+  await page.getByRole('button', { name: 'Όσοι είναι πάνω από τον μέσο όρο' }).click();
+  await page.getByLabel('Ποσοστό %').selectOption('20');
+  await page.locator('.upset-opts').getByLabel('Κάθε πόσους γύρους').selectOption('3');
+  await page.getByLabel(/Επίδομα ουραγού/).check();
+  await page.getByRole('button', { name: /Νέος κανόνας/ }).click();
+  await page.getByLabel('Όνομα (προαιρετικό)').fill('Δημοτικά τέλη');
+  await page.getByLabel(/1\. Πότε/).selectOption('go');
+  await page.getByLabel(/2\. Ποιος/).selectOption('all');
+  await page.getByLabel(/3\. Τι/).selectOption('pay');
+  await page.getByLabel('Ποσό (€)').fill('50');
+  await expect(page.locator('.rule-preview')).toContainText('Όταν περνά από την Αφετηρία: όλοι πληρώνουν');
+  await page.getByRole('button', { name: 'Προσθήκη', exact: true }).click();
+  await expect(page.locator('.rulecard')).toContainText('Δημοτικά τέλη');
+  await page.getByText('Έναρξη παιχνιδιού').click();
+  const g = await page.evaluate(() => JSON.parse(localStorage.getItem('gtn-save')!).game);
+  expect(g.rules.wealthTax).toEqual({ every: 3, pct: 20, who: 'above' });
+  expect(g.rules.underdog).toBe(true);
+  expect(g.rules.custom).toEqual([{ text: 'Δημοτικά τέλη', when: { t: 'go' }, who: 'all', what: { t: 'money', amount: -50 } }]);
+  // the game's rules list them
+  await page.locator('button', { hasText: '✕' }).first().click();
+  await page.getByRole('button', { name: /Κανόνες/ }).first().click();
+  await expect(page.locator('.rules-game')).toContainText('Φόρος πλούτου: κάθε 3 γύρους');
+  await expect(page.locator('.rules-game')).toContainText('Δημοτικά τέλη');
+  expect(errors).toEqual([]);
+});
+
 test('landing on someone else\'s property: the rent card', async ({ page }) => {
   const errors = watchErrors(page);
   await freshStart(page, { fx: { gfx: '2d', sound: false, vibrate: false, shake: false, cinema: false } });

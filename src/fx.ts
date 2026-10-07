@@ -46,7 +46,7 @@ export function tick() {
 }
 
 /** vibration (Android; iPhone browsers don't support it) */
-export function buzz(ms = 15) {
+export function buzz(ms: number | number[] = 15) {
   try { navigator.vibrate?.(ms); } catch { /* ignore */ }
 }
 

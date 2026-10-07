@@ -28,7 +28,7 @@ It runs entirely in the browser: no app store, no accounts, no backend, no runni
 
 ## Features
 
-- **Full rules engine** — rent and colour groups, even building with a limited bank stock, mortgages, jail (3 doubles, fines, cards), Chance / Community Chest, open and sealed auctions, trades with counter-offers, bankruptcy to players or the bank, time-limited games, optional house rules.
+- **Full rules engine** — rent and colour groups, even building with a limited bank stock, mortgages, jail (3 doubles, fines, cards), Chance / Community Chest, open and sealed auctions, trades with counter-offers, bankruptcy to players or the bank, time-limited games, optional house rules, **upsets** (wealth tax, underdog bonus, market crisis, earthquake) and **your own rules** (when → who → what).
 - **Two boards** — classic (40 squares, 2–6 players) and a large 56-square board for 7–10 players.
 - **3D board** (three.js) — physics-simulated dice, 23 hand-modelled pieces, a small city of buildings around the board, a camera that follows each move, animated coins for every payment, animations with sound for rent, tax, Start and Free Parking, a jail cage with sirens. A 2D board is available for older phones.
 - **Online play, peer-to-peer** — one phone hosts, the others join with a 5-letter code or a QR code. Chat, presence, joining a game in progress (as a player or a spectator, the host decides), automatic moves for absent players, reconnection, and host take-over if the host disappears.
@@ -59,8 +59,8 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 Every push to `main` runs **lint → unit tests → build → browser tests → deploy**; nothing is published unless everything passes.
 
-- **89 unit tests (Vitest)** — targeted rule tests, 60 fully simulated random games checking invariants, 3,000 simulated dice throws (always flat, inside the board, showing the rolled value), every 3D piece, translation coverage (every message exists in Greek and English), and the in-app rules (every amount filled in from the board).
-- **25 end-to-end tests (Playwright)** — real browser play on the 3D and 2D boards, menus, rules, city names, custom prices and their reset buttons, board contrast, the rent animation, taking a photo with the camera, jail, language switch, end of game and rematch, and two-phone online tests: chat, sync, joining while the host is away, joining a game in progress, cards shown to every phone, long games with large states (including an auction with many bids), the host losing the internet, the host leaving for good (another player takes over by themselves), and a phone stuck on an outdated screen recovering by itself.
+- **103 unit tests (Vitest)** — targeted rule tests (including every upset and custom rule), 80 fully simulated random games checking invariants (20 with every upset on), 3,000 simulated dice throws (always flat, inside the board, showing the rolled value), every 3D piece, translation coverage (every message exists in Greek and English), and the in-app rules (every amount filled in from the board).
+- **26 end-to-end tests (Playwright)** — real browser play on the 3D and 2D boards, menus, rules, city names, custom prices and their reset buttons, upsets and custom rules, board contrast, the rent animation, taking a photo with the camera, jail, language switch, end of game and rematch, and two-phone online tests: chat, sync, joining while the host is away, joining a game in progress, cards shown to every phone, long games with large states (including an auction with many bids), the host losing the internet, the host leaving for good (another player takes over by themselves), and a phone stuck on an outdated screen recovering by itself.
 
 ## Tech stack
 

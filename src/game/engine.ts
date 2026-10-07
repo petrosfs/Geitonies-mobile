@@ -1,8 +1,9 @@
 import { BOARDS, isOwnable } from './boards';
 import { buildCards } from './cards';
 import { defaultName, validNameMap } from './cities';
+import { cleanHouseRules, firesAt } from './houserules';
 import type {
-  Action, Board, Card, Game, Offer, Owed, Pending, Player, PlayerStats, Setup, Stats, Trade,
+  Action, Board, Card, CustomRule, Game, Offer, Owed, Pending, Player, PlayerStats, RuleDo, RuleWho, Setup, Stats, Trade,
 } from './types';
 
 export class RuleError extends Error {}
@@ -186,7 +187,7 @@ export function newGame(setup: Setup, seed: number, now: number): Game {
     city: setup.city ?? 'athens',
     nameMap: validNameMap(setup.boardId, setup.nameMap),
     prices: validPrices(b, setup.prices),
-    rules: setup.rules,
+    rules: cleanHouseRules(setup.rules, b),
     players: setup.players.map((p) => ({
       ...p, cash: startCashOf(setup.rules, b.startCash), pos: 0, jail: false, jailTries: 0, jailCards: [], out: false, lapped: false,
     })),
@@ -246,10 +247,13 @@ function charge(g: Game, who: string, owed: Owed[], then?: { move: number }) {
 
 function salary(g: Game, p: Player, landedOnGo: boolean) {
   const s = board(g).salary;
-  const n = landedOnGo && g.rules.doubleGo ? s * 2 : s;
+  let n = landedOnGo && g.rules.doubleGo ? s * 2 : s;
+  // upset rule: the poorest player gets double salary
+  if (g.rules.underdog && last(g)?.id === p.id) { n *= 2; log(g, 'underdog', { p: p.id }); }
   p.cash += n;
   p.lapped = true;
   log(g, 'salary', { p: p.id, n });
+  customRules(g, p, (w) => w.t === 'go');
 }
 
 function moveBy(g: Game, p: Player, steps: number, dice?: number) {
@@ -258,6 +262,7 @@ function moveBy(g: Game, p: Player, steps: number, dice?: number) {
   const to = (((from + steps) % N) + N) % N;
   p.pos = to;
   if (steps > 0 && from + steps >= N) salary(g, p, to === 0);
+  if (p.jail) return; // a rule sent them to jail on the way
   log(g, 'moved', { p: p.id, sq: to });
   land(g, p, dice ?? Math.abs(steps));
 }
@@ -266,6 +271,7 @@ function moveTo(g: Game, p: Player, sq: number, collectGo: boolean, opts: { x2?:
   const from = p.pos;
   p.pos = sq;
   if (collectGo && (sq < from || (sq === 0 && from !== 0))) salary(g, p, sq === 0);
+  if (p.jail) return;
   log(g, 'moved', { p: p.id, sq });
   land(g, p, g.dice ? g.dice[0] + g.dice[1] : 7, opts);
 }
@@ -281,6 +287,9 @@ function toJail(g: Game, p: Player) {
 
 function land(g: Game, p: Player, dice: number, opts: { x2?: boolean; util10?: boolean } = {}) {
   const b = board(g);
+  const at = p.pos;
+  customRules(g, p, (w) => w.t === 'land' && w.sq === at);
+  if (p.jail || p.out) return;
   const s = b.squares[p.pos];
   switch (s.kind) {
     case 'street': case 'station': case 'utility': {
@@ -453,6 +462,7 @@ function finish(g: Game) {
 }
 
 function advance(g: Game) {
+  const roundBefore = g.round;
   const n = g.players.length;
   const rank = (i: number) => (i - g.startIdx + n) % n;
   let next = g.cur;
@@ -468,6 +478,114 @@ function advance(g: Game) {
   g.rolled = false; g.again = false; g.doubles = 0; g.dice = null;
   g.turnNo++;
   log(g, 'turn', { p: curP(g).id });
+  if (g.round !== roundBefore) roundRules(g);
+}
+
+// ---------- upset rules ----------
+
+const worths = (g: Game) => active(g).map((p) => ({ p, w: netWorth(g, p.id) }));
+/** the richest player (first in turn order on a tie), if there are two or more */
+function leader(g: Game): Player | null {
+  const ws = worths(g);
+  if (ws.length < 2) return null;
+  return ws.reduce((a, b) => (b.w > a.w ? b : a)).p;
+}
+/** the poorest player (first in turn order on a tie), if there are two or more */
+function last(g: Game): Player | null {
+  const ws = worths(g);
+  if (ws.length < 2) return null;
+  return ws.reduce((a, b) => (b.w < a.w ? b : a)).p;
+}
+const r10 = (n: number) => Math.round(n / 10) * 10;
+
+function targets(g: Game, who: RuleWho, self: Player): Player[] {
+  if (who === 'self') return self.out ? [] : [self];
+  if (who === 'all') return active(g);
+  const p = who === 'leader' ? leader(g) : last(g);
+  return p ? [p] : [];
+}
+
+function repairsBill(g: Game, id: string, house: number, hotel: number): number {
+  let n = 0;
+  for (const sq of ownedBy(g, id)) {
+    const h = g.props[sq].houses;
+    n += h === 5 ? hotel : h * house;
+  }
+  return n;
+}
+
+/** take one building off a street (a hotel becomes 4 houses if the bank has them); half its price back */
+function dropHouse(g: Game, sq: number) {
+  const s = board(g).squares[sq];
+  const pr = g.props[sq];
+  if (!pr.owner || pr.houses === 0) return;
+  const p = pl(g, pr.owner);
+  if (pr.houses === 5 && bankStock(g).houses < 4) { p.cash += (s.house! * 5) / 2; pr.houses = 0; }
+  else { pr.houses--; p.cash += s.house! / 2; }
+  log(g, 'lostHouse', { p: p.id, sq });
+}
+
+function doRule(g: Game, p: Player, what: RuleDo) {
+  switch (what.t) {
+    case 'money':
+      if (what.amount > 0) { p.cash += what.amount; log(g, 'got', { p: p.id, n: what.amount }); }
+      else charge(g, p.id, [{ to: feeTarget(g), amount: -what.amount }]);
+      return;
+    case 'pct': charge(g, p.id, [{ to: feeTarget(g), amount: r10((netWorth(g, p.id) * what.pct) / 100) }]); return;
+    case 'repairs': charge(g, p.id, [{ to: feeTarget(g), amount: repairsBill(g, p.id, what.house, what.hotel) }]); return;
+    case 'jail': if (!p.jail) toJail(g, p); return;
+    case 'loseHouse': {
+      const mine = ownedBy(g, p.id).filter((sq) => g.props[sq].houses > 0);
+      if (!mine.length) return;
+      dropHouse(g, mine.reduce((a, b) => (g.props[b].houses > g.props[a].houses ? b : a)));
+      return;
+    }
+  }
+}
+
+function runRule(g: Game, i: number, r: CustomRule, self: Player) {
+  const who = targets(g, r.who, self);
+  if (!who.length) return;
+  log(g, 'rule', { r: i, p: self.id });
+  for (const p of who) doRule(g, p, r.what);
+}
+
+function customRules(g: Game, self: Player, match: (w: CustomRule['when']) => boolean) {
+  (g.rules.custom ?? []).forEach((r, i) => { if (match(r.when)) runRule(g, i, r, self); });
+}
+
+/** at the start of a new round */
+function roundRules(g: Game) {
+  const round = g.round ?? 1;
+  const R = g.rules;
+  if (R.wealthTax && firesAt(round, R.wealthTax.every)) {
+    const ws = worths(g);
+    const avg = ws.reduce((s, x) => s + x.w, 0) / Math.max(1, ws.length);
+    const lead = leader(g);
+    const who = R.wealthTax.who === 'leader' ? (lead ? [lead] : []) : ws.filter((x) => x.w > avg).map((x) => x.p);
+    for (const p of who) {
+      const n = r10((netWorth(g, p.id) * R.wealthTax.pct) / 100);
+      if (n <= 0) continue;
+      log(g, 'wealthTax', { p: p.id, n, pct: R.wealthTax.pct });
+      charge(g, p.id, [{ to: feeTarget(g), amount: n }]);
+    }
+  }
+  if (R.crisis && firesAt(round, R.crisis.every)) {
+    log(g, 'crisis', { h: R.crisis.house, H: R.crisis.hotel });
+    for (const p of active(g)) charge(g, p.id, [{ to: feeTarget(g), amount: repairsBill(g, p.id, R.crisis.house, R.crisis.hotel) }]);
+  }
+  if (R.quake && firesAt(round, R.quake.every)) {
+    const b = board(g);
+    const hit = b.groups.map((gr, k) => ({ k, m: gr.members })).filter((x) => x.m.some((sq) => g.props[sq]?.houses > 0));
+    if (!hit.length) log(g, 'quakeNone');
+    else {
+      const x = hit[Math.floor(rand(g) * hit.length)];
+      log(g, 'quake', { sq: x.m[0] });
+      for (const sq of x.m) dropHouse(g, sq);
+    }
+  }
+  const self = curP(g);
+  customRules(g, self, (w) => w.t === 'rounds' && firesAt(round, w.n));
 }
 
 // ---------- trades ----------

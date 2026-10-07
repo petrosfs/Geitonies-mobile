@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Board3D } from './Board3D';
 import { RulesSheet } from './Rules';
-import { boardEvents, turnCard, type BoardEvent } from './events';
+import { boardEvents, isUpset, turnCard, type BoardEvent } from './events';
+import { ruleTitle } from './upsets-text';
 import { ReportSheet } from './Report';
 import { buzz, chime, fanfare, hasWebGL, kaching, listenShake, requestMotion, siren, taxSound, unlockAudio } from './fx';
 import { CHAT_MAX, clampContrast, CONTRAST_MAX, CONTRAST_MIN, MANUAL_TAKEOVER_MS, store, TAKEOVER_MS } from './store';
@@ -94,9 +95,9 @@ export function GameScreen() {
   const rentNow = calm && !busy && !pendingMove && !jailNow ? rentQueue[0] : undefined;
   useEffect(() => {
     if (!rentNow) return;
-    if (s.fx.sound) ({ rent: kaching, tax: taxSound, go: fanfare, parking: rentNow.n > 0 ? kaching : chime })[rentNow.kind]();
-    if (s.fx.vibrate) buzz(40);
-    const id = window.setTimeout(() => setRentQueue((q) => q.slice(1)), 2400);
+    if (s.fx.sound) ({ rent: kaching, tax: taxSound, go: fanfare, parking: rentNow.n > 0 ? kaching : chime, wealth: taxSound, crisis: taxSound, quake: taxSound, rule: chime })[rentNow.kind]();
+    if (s.fx.vibrate) buzz(rentNow.kind === 'quake' ? [60, 40, 60, 40, 120] : 40);
+    const id = window.setTimeout(() => setRentQueue((q) => q.slice(1)), isUpset(rentNow) ? 3400 : 2400);
     return () => clearTimeout(id);
   }, [rentNow, rentQueue.length]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -751,20 +752,30 @@ function EventCard({ g, ev }: { g: Game; ev: BoardEvent }) {
     tax: { icon: '🧾', title: t('taxTitle'), color: '#e5484d', sign: '−', rain: '💸' },
     go: { icon: '🏁', title: t('goTitle'), color: '#f4b33d', sign: '+', rain: '⭐' },
     parking: { icon: '🅿️', title: t('parkingTitle'), color: '#30a46c', sign: '+', rain: ev.n > 0 ? '🪙' : '🌿' },
+    wealth: { icon: '💰', title: t('wealthTitle'), color: '#e5484d', sign: '−', rain: '💸' },
+    crisis: { icon: '📉', title: t('crisisTitle'), color: '#e5484d', sign: '', rain: '📉' },
+    quake: { icon: '🌋', title: t('quakeTitle'), color: '#7a5c48', sign: '', rain: '🧱' },
+    rule: { icon: '📜', title: t('ruleTitle'), color: '#8e4ec6', sign: '', rain: '✨' },
   }[ev.kind];
+  const rule = ev.kind === 'rule' ? g.rules.custom?.[ev.r ?? -1] : undefined;
+  const words = ev.kind === 'crisis' ? t('crisisText', { h: m(g.rules.crisis?.house ?? 0), H: m(g.rules.crisis?.hotel ?? 0) })
+    : ev.kind === 'quake' ? (ev.sq < 0 ? t('quakeNoneText') : t('quakeText', { sq: sqName(g, ev.sq, lang) }))
+    : rule ? ruleTitle(lang, rule, (sq) => sqName(g, sq, lang))
+    : null;
   return (
     <div className={'rentbanner ev-' + ev.kind} aria-live="polite">
       <div className="coins" aria-hidden>{Array.from({ length: 10 }, (_, i) => <span key={i} style={{ left: `${6 + i * 9.5}%`, animationDelay: `${(i % 5) * 90}ms` }}>{look.rain}</span>)}</div>
       <div className="rentcard" style={{ borderColor: look.color }}>
         <div className="rent-title">{look.icon} {look.title}</div>
-        {ev.n > 0
-          ? <div className={'rent-amount' + (look.sign === '+' ? ' plus' : '')}>{look.sign}{m(ev.n)}</div>
-          : <div className="rent-amount calm">{t('parkingRest')}</div>}
+        {words !== null ? <div className="rent-words">{words}</div>
+          : ev.n > 0
+            ? <div className={'rent-amount' + (look.sign === '+' ? ' plus' : '')}>{look.sign}{m(ev.n)}</div>
+            : <div className="rent-amount calm">{t('parkingRest')}</div>}
         <div className="rent-who">
           {who && <PieceIcon id={who.emoji} color={who.color} size={26} />} <span style={{ color: who?.color }}>{who?.name}</span>
           {owner && <><span className="arrow">→</span><PieceIcon id={owner.emoji} color={owner.color} size={26} /> <span style={{ color: owner.color }}>{owner.name}</span></>}
         </div>
-        <div className="small muted">{sqName(g, ev.sq, lang)}</div>
+        {ev.sq >= 0 && ev.kind !== 'quake' && <div className="small muted">{sqName(g, ev.sq, lang)}</div>}
       </div>
     </div>
   );

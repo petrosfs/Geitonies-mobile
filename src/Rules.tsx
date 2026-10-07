@@ -4,6 +4,11 @@ import type { Game } from './game/types';
 import { fill, RULES, ruleValues } from './rules';
 import { Modal } from './components';
 import { useT } from './ui';
+import { sqName } from './game/engine';
+import { customRuleText, ruleTitle, upsetLines } from './upsets-text';
+import type { CustomRule, Lang } from './game/types';
+
+const customRuleTextFor = (lang: Lang, c: CustomRule, g: Game) => customRuleText(lang, c, (sq) => sqName(g, sq, lang));
 
 /** The rules: short sections that open for details. Inside a game, the game's own settings come first. */
 export function RulesSheet({ g, onClose }: { g?: Game | null; onClose: () => void }) {
@@ -29,6 +34,8 @@ export function RulesSheet({ g, onClose }: { g?: Game | null; onClose: () => voi
             {(['freeParking', 'doubleGo', 'noRentInJail', 'buyAfterLap', 'allowPass'] as const).map((k) => (
               <li key={k}>{onOff(!!r[k])} {t('r_' + k)}</li>
             ))}
+            {upsetLines(lang, r).map((l, i) => <li key={'u' + i}>{l}</li>)}
+            {(r.custom ?? []).map((c, i) => <li key={'c' + i}>📜 {ruleTitle(lang, c, (sq) => sqName(g, sq, lang))}{c.text.trim() ? ' — ' + customRuleTextFor(lang, c, g) : ''}</li>)}
             {customCards > 0 && <li>🃏 {t('rulesCustomCards', { n: customCards })}</li>}
             {g.prices && Object.keys(g.prices).length > 0 && <li>🏷️ {t('rulesPrices', { n: Object.keys(g.prices).length })}</li>}
           </ul>

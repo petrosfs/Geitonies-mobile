@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.11.0
+- Upsets (optional, in the setup's rules tab), so a game isn't decided early:
+  - **Wealth tax:** every N rounds the richest player — or everyone above the average — pays a chosen % of their net worth (to Free Parking if it's on, else to the bank).
+  - **Underdog bonus:** the poorest player gets double salary at Start.
+  - **Market crisis:** every N rounds everyone pays per house and per hotel.
+  - **Earthquake:** every N rounds a random colour group with buildings loses a house on each street (half the price back).
+- Your own rules, like your own cards: When (every N rounds / passing Start / stopping on a square) → Who (the player whose turn it is / everyone / the richest / the poorest) → What (gets or pays money, pays a % of net worth, pays per house and hotel, goes to jail, loses a house).
+- Everyone sees a short animation when an upset or a rule fires (the earthquake shakes); the history and the in-game rules list them.
+
 ## 1.10.0
 - Sharper board text: a larger board picture (3072 px on phones, 4096 px on computers), the best angle filtering the device offers, and slightly bigger, bolder names and prices.
 - Animations with sound for paying tax, landing on Start and landing on Free Parking (with or without the pot), next to the rent one; the square flashes on the 3D board.

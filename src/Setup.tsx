@@ -6,7 +6,9 @@ import { BOARDS } from './game/boards';
 import { startCashOf } from './game/engine';
 import { CITIES, CITY_IDS, defaultName } from './game/cities';
 import { CUSTOM_EFFECTS, type CustomEffectKind } from './game/cards';
-import type { CustomCard, Deck, Effect, PlayerSetup, Setup } from './game/types';
+import type { CustomCard, CustomRule, Deck, Effect, PlayerSetup, RuleWho, Setup } from './game/types';
+import { cleanCrisis, cleanCustomRule, DEFAULT_CRISIS, DEFAULT_QUAKE, DEFAULT_WEALTH_TAX, MAX_CUSTOM_RULES, RULE_TEXT_MAX } from './game/houserules';
+import { customRuleText, wealthTaxText } from './upsets-text';
 import { canUseCamera, COLORS, EMOJIS, readPhoto, useStore, useT } from './ui';
 import { Avatar, PieceIcon } from './components';
 import { CameraSheet } from './Camera';
@@ -483,6 +485,7 @@ function RulesTab({ setup, set, online }: { setup: Setup; set: (p: Partial<Setup
           {t('r_' + k)}
         </label>
       ))}
+      <UpsetRules setup={setup} set={set} />
       <h3>{t('startCash')}</h3>
       <div className="row start-cash">
         <input type="number" inputMode="numeric" min={100} max={20000} step={50}
@@ -502,6 +505,195 @@ function RulesTab({ setup, set, online }: { setup: Setup; set: (p: Partial<Setup
             {[30, 60, 120, 300].map((n) => <option key={n} value={n}>{t('seconds', { n })}</option>)}
           </select>
         </>
+      )}
+    </div>
+  );
+}
+
+// ---------------- upset rules ----------------
+
+const EVERY = [1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20];
+const PCTS = [5, 10, 15, 20, 25, 30, 40, 50];
+type RuleKind = 'gain' | 'pay' | 'pct' | 'repairs' | 'jail' | 'loseHouse';
+const RULE_KINDS: RuleKind[] = ['gain', 'pay', 'pct', 'repairs', 'jail', 'loseHouse'];
+const WHOS: RuleWho[] = ['self', 'all', 'leader', 'last'];
+interface RuleDraft { text: string; when: 'rounds' | 'go' | 'land'; n: number; sq: number; who: RuleWho; kind: RuleKind; amount: number; pct: number; house: number; hotel: number }
+
+function ruleFrom(d: RuleDraft): CustomRule {
+  const when = d.when === 'rounds' ? { t: 'rounds' as const, n: d.n } : d.when === 'land' ? { t: 'land' as const, sq: d.sq } : { t: 'go' as const };
+  const what = d.kind === 'gain' ? { t: 'money' as const, amount: Math.abs(d.amount) }
+    : d.kind === 'pay' ? { t: 'money' as const, amount: -Math.abs(d.amount) }
+    : d.kind === 'pct' ? { t: 'pct' as const, pct: d.pct }
+    : d.kind === 'repairs' ? { t: 'repairs' as const, house: d.house, hotel: d.hotel }
+    : { t: d.kind };
+  return { text: d.text, when, who: d.who, what };
+}
+
+function EverySelect({ value, onChange, label }: { value: number; onChange: (n: number) => void; label: string }) {
+  const opts = EVERY.includes(value) ? EVERY : [...EVERY, value].sort((a, b) => a - b);
+  return (
+    <label className="field"><span>{label}</span>
+      <select value={value} onChange={(e) => onChange(Number(e.target.value))}>
+        {opts.map((n) => <option key={n} value={n}>{n}</option>)}
+      </select>
+    </label>
+  );
+}
+
+function UpsetRules({ setup, set }: { setup: Setup; set: (p: Partial<Setup>) => void }) {
+  const { t, lang } = useT();
+  const r = setup.rules;
+  const rules = (patch: Partial<Setup['rules']>) => set({ rules: { ...r, ...patch } });
+  const b = BOARDS[setup.boardId];
+  const sqLabel = (i: number) => setup.names[i] || defaultName(setup.boardId, setup.city, setup.nameMap, i, lang);
+  const [draft, setDraft] = useState<RuleDraft | null>(null);
+  const custom = r.custom ?? [];
+  const wt = r.wealthTax;
+  const cr = r.crisis;
+  const preview = draft ? cleanCustomRule(ruleFrom(draft), b) : null;
+  const addRule = () => {
+    if (!preview) return;
+    rules({ custom: [...custom, preview] });
+    setDraft(null);
+  };
+  return (
+    <div className="upsets">
+      <h3>🔀 {t('upsets')}</h3>
+      <p className="muted small">{t('upsetsHint')}</p>
+
+      <label className="check">
+        <input type="checkbox" checked={!!wt} onChange={(e) => rules({ wealthTax: e.target.checked ? { ...DEFAULT_WEALTH_TAX } : undefined })} />
+        💰 {t('u_wealthTax')}
+      </label>
+      {wt && (
+        <div className="panel upset-opts">
+          <div className="seg">
+            {(['leader', 'above'] as const).map((w) => (
+              <button key={w} className={wt.who === w ? 'on' : ''} onClick={() => rules({ wealthTax: { ...wt, who: w } })}>
+                {t(w === 'leader' ? 'wtWhoLeader' : 'wtWhoAbove')}
+              </button>
+            ))}
+          </div>
+          <div className="row">
+            <label className="field"><span>{t('percent')}</span>
+              <select value={wt.pct} onChange={(e) => rules({ wealthTax: { ...wt, pct: Number(e.target.value) } })}>
+                {(PCTS.includes(wt.pct) ? PCTS : [...PCTS, wt.pct].sort((a, b2) => a - b2)).map((n) => <option key={n} value={n}>{n}%</option>)}
+              </select>
+            </label>
+            <EverySelect label={t('everyRounds')} value={wt.every} onChange={(n) => rules({ wealthTax: { ...wt, every: n } })} />
+          </div>
+          <p className="small muted">{wealthTaxText(lang, r)}</p>
+        </div>
+      )}
+
+      <label className="check">
+        <input type="checkbox" checked={!!r.underdog} onChange={(e) => rules({ underdog: e.target.checked || undefined })} />
+        🆙 {t('u_underdog')}
+      </label>
+
+      <label className="check">
+        <input type="checkbox" checked={!!cr} onChange={(e) => rules({ crisis: e.target.checked ? { ...DEFAULT_CRISIS } : undefined })} />
+        📉 {t('u_crisis')}
+      </label>
+      {cr && (
+        <div className="panel upset-opts">
+          <div className="row">
+            <EverySelect label={t('everyRounds')} value={cr.every} onChange={(n) => rules({ crisis: { ...cr, every: n } })} />
+            <label className="field"><span>{t('perHouse')}</span>
+              <input type="number" inputMode="numeric" min={0} step={5} value={cr.house}
+                onChange={(e) => rules({ crisis: { ...cr, house: Number(e.target.value) } })} onBlur={() => rules({ crisis: cleanCrisis(cr) })} />
+            </label>
+            <label className="field"><span>{t('perHotel')}</span>
+              <input type="number" inputMode="numeric" min={0} step={5} value={cr.hotel}
+                onChange={(e) => rules({ crisis: { ...cr, hotel: Number(e.target.value) } })} onBlur={() => rules({ crisis: cleanCrisis(cr) })} />
+            </label>
+          </div>
+        </div>
+      )}
+
+      <label className="check">
+        <input type="checkbox" checked={!!r.quake} onChange={(e) => rules({ quake: e.target.checked ? { ...DEFAULT_QUAKE } : undefined })} />
+        🌋 {t('u_quake')}
+      </label>
+      {r.quake && (
+        <div className="panel upset-opts">
+          <EverySelect label={t('everyRounds')} value={r.quake.every} onChange={(n) => rules({ quake: { every: n } })} />
+          <p className="small muted">{t('u_quakeDesc', { e: r.quake.every })}</p>
+        </div>
+      )}
+
+      <h3>📜 {t('customRules')}</h3>
+      {custom.length === 0 && <p className="muted small">{t('noCustomRules')}</p>}
+      <ul className="cardlist">
+        {custom.map((c, i) => (
+          <li key={i} className="minicard rulecard">
+            {c.text && <div><strong>{c.text}</strong></div>}
+            <div className="small">{customRuleText(lang, c, sqLabel)}</div>
+            <button className="btn ghost small" onClick={() => rules({ custom: custom.filter((_, k) => k !== i) })}>{t('remove')}</button>
+          </li>
+        ))}
+      </ul>
+      {!draft && custom.length < MAX_CUSTOM_RULES && (
+        <button className="btn ghost wide" onClick={() => setDraft({ text: '', when: 'rounds', n: 5, sq: 0, who: 'leader', kind: 'pay', amount: 100, pct: 10, house: 25, hotel: 100 })}>
+          + {t('addRule')}
+        </button>
+      )}
+      {draft && (
+        <div className="panel rule-draft">
+          <label className="field"><span>{t('ruleName')}</span>
+            <input value={draft.text} maxLength={RULE_TEXT_MAX} placeholder={t('ruleNamePh')} onChange={(e) => setDraft({ ...draft, text: e.target.value })} />
+          </label>
+          <label className="field"><span>1. {t('ruleWhen')}</span>
+            <select value={draft.when} onChange={(e) => setDraft({ ...draft, when: e.target.value as RuleDraft['when'] })}>
+              {(['rounds', 'go', 'land'] as const).map((w) => <option key={w} value={w}>{t('when_' + w)}</option>)}
+            </select>
+          </label>
+          {draft.when === 'rounds' && <EverySelect label={t('everyRounds')} value={draft.n} onChange={(n) => setDraft({ ...draft, n })} />}
+          {draft.when === 'land' && (
+            <label className="field"><span>{t('square')}</span>
+              <select value={draft.sq} onChange={(e) => setDraft({ ...draft, sq: Number(e.target.value) })}>
+                {b.squares.map((_, i) => <option key={i} value={i}>{i}. {sqLabel(i)}</option>)}
+              </select>
+            </label>
+          )}
+          <label className="field"><span>2. {t('ruleWho')}</span>
+            <select value={draft.who} onChange={(e) => setDraft({ ...draft, who: e.target.value as RuleWho })}>
+              {WHOS.map((w) => <option key={w} value={w}>{t('who_' + w)}</option>)}
+            </select>
+          </label>
+          <label className="field"><span>3. {t('ruleWhat')}</span>
+            <select value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value as RuleKind })}>
+              {RULE_KINDS.map((k) => <option key={k} value={k}>{t('do_' + k)}</option>)}
+            </select>
+          </label>
+          {(draft.kind === 'gain' || draft.kind === 'pay') && (
+            <label className="field"><span>{t('amount')}</span>
+              <input type="number" inputMode="numeric" min={10} step={10} value={draft.amount} onChange={(e) => setDraft({ ...draft, amount: Number(e.target.value) })} />
+            </label>
+          )}
+          {draft.kind === 'pct' && (
+            <label className="field"><span>{t('percent')}</span>
+              <select value={draft.pct} onChange={(e) => setDraft({ ...draft, pct: Number(e.target.value) })}>
+                {PCTS.map((n) => <option key={n} value={n}>{n}%</option>)}
+              </select>
+            </label>
+          )}
+          {draft.kind === 'repairs' && (
+            <div className="row">
+              <label className="field"><span>{t('perHouse')}</span>
+                <input type="number" inputMode="numeric" min={0} step={5} value={draft.house} onChange={(e) => setDraft({ ...draft, house: Number(e.target.value) })} />
+              </label>
+              <label className="field"><span>{t('perHotel')}</span>
+                <input type="number" inputMode="numeric" min={0} step={5} value={draft.hotel} onChange={(e) => setDraft({ ...draft, hotel: Number(e.target.value) })} />
+              </label>
+            </div>
+          )}
+          {preview && <p className="rule-preview">📜 {customRuleText(lang, preview, sqLabel)}</p>}
+          <div className="row">
+            <button className="btn ghost" onClick={() => setDraft(null)}>{t('cancel')}</button>
+            <button className="btn primary" disabled={!preview} onClick={addRule}>{t('add')}</button>
+          </div>
+        </div>
       )}
     </div>
   );
