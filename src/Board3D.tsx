@@ -41,7 +41,6 @@ function Board3DInner({ g, onSquare, onBusy, overlay, onLost }: {
   useEffect(() => { sceneRef.current?.update(g, s.lang, s.photos); }, [g, s.lang, s.photos]);
   useEffect(() => { sceneRef.current?.setFx(s.fx.sound, s.fx.vibrate, s.fx.cinema); }, [s.fx.sound, s.fx.vibrate, s.fx.cinema]);
   useEffect(() => { sceneRef.current?.setLight(s.fx.light ?? 'normal'); }, [s.fx.light]);
-  useEffect(() => { sceneRef.current?.setLight(s.fx.light ?? 'normal'); }, [s.fx.light]);
 
   return (
     <div className="board3d">

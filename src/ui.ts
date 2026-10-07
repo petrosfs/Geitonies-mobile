@@ -59,7 +59,11 @@ export function logText(g: Game, e: LogEntry, lang: 'el' | 'en'): string {
     else if (k === 'to') a[k] = v === 'bank' ? tr(lang, 'bank') : v === 'pot' ? tr(lang, 'pot', { n: '' }).replace(/[: ]+$/, '') : playerName(g, String(v));
     else if (k === 'sq') a[k] = sqName(g, Number(v), lang);
     else if (k === 'n' && MONEY_KEYS.has(e.k)) a[k] = fmtMoney(lang, Number(v));
-    else a[k] = v;
+    else if (k === 'c' && e.k === 'card') {
+      const c = g.cards[Number(v)];
+      a.c = c ? cardText(g, c, lang) : '';
+      a.d = c ? tr(lang, 'cardTitle_' + c.deck) : '';
+    } else a[k] = v;
   }
   return tr(lang, 'l_' + e.k, a);
 }
@@ -80,3 +84,4 @@ export const APP_VERSION_TEXT = `v${__APP_VERSION__}${__APP_BUILD__ && __APP_BUI
 
 /** can this browser show a live camera inside the page? */
 export const canUseCamera = () => typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
+

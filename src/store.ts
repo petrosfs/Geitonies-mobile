@@ -12,7 +12,7 @@ export type Net = 'idle' | 'connecting' | 'ok' | 'lost' | 'error';
 
 /** settings of this device only */
 export type BoardLight = 'normal' | 'dim' | 'night';
-export interface Fx { gfx: '3d' | '2d'; sound: boolean; vibrate: boolean; shake: boolean; cinema: boolean; light: BoardLight }
+export interface Fx { gfx: '3d' | '2d'; sound: boolean; vibrate: boolean; shake: boolean; cinema: boolean; light: BoardLight; /** board contrast in percent (100 = as designed) */ contrast: number }
 
 export interface ChatMsg { id: string; from: string; text: string; t: number }
 export const CHAT_MAX = 200;
@@ -79,10 +79,13 @@ type Msg =
   | { type: 'chatmsg'; msg: ChatMsg }
   | { type: 'chatlog'; msgs: ChatMsg[] };
 
-// 5 minutes (a smaller value can be set in localStorage 'gtn-takeover-ms' for testing)
+// the host gone this long: the next player takes over by themselves (each further one waits once more);
+// a smaller value can be set in localStorage 'gtn-takeover-ms' for testing
 export const TAKEOVER_MS = (() => {
-  try { return Number(localStorage.getItem('gtn-takeover-ms')) || 5 * 60 * 1000; } catch { return 5 * 60 * 1000; }
+  try { return Number(localStorage.getItem('gtn-takeover-ms')) || 30_000; } catch { return 30_000; }
 })();
+/** anyone may press "continue now" after this long */
+export const MANUAL_TAKEOVER_MS = Math.min(10_000, TAKEOVER_MS);
 const PREFIX = 'gtn7-';
 const SAVE_KEY = 'gtn-save';
 const PREF_KEY = 'gtn-prefs';
@@ -107,7 +110,14 @@ export function emptySetup(): Setup {
   return { players: [], boardId: 'classic', names: [], customCards: [], rules: defaultRules() };
 }
 
-const DEFAULT_FX: Fx = { gfx: '3d', sound: true, vibrate: true, shake: true, cinema: true, light: 'normal' };
+export const CONTRAST_MIN = 80;
+export const CONTRAST_MAX = 150;
+export function clampContrast(v: unknown): number {
+  const n = Math.round(Number(v) / 5) * 5;
+  return Number.isFinite(n) ? Math.min(CONTRAST_MAX, Math.max(CONTRAST_MIN, n)) : 100;
+}
+
+const DEFAULT_FX: Fx = { gfx: '3d', sound: true, vibrate: true, shake: true, cinema: true, light: 'normal', contrast: 100 };
 
 function loadPrefs(): { lang: Lang; device: string; fx: Fx } {
   try {
@@ -115,6 +125,7 @@ function loadPrefs(): { lang: Lang; device: string; fx: Fx } {
     if (p.device) {
       const fx = { ...DEFAULT_FX, ...(p.fx ?? {}) };
       if (!['normal', 'dim', 'night'].includes(fx.light)) fx.light = 'normal';
+      fx.contrast = clampContrast(fx.contrast);
       return { lang: p.lang === 'en' ? 'en' : 'el', device: p.device, fx };
     }
   } catch { /* ignore */ }
@@ -139,6 +150,8 @@ class Store {
   private peer: Peer | null = null;
   /** host: device -> its open connections (a computer may have the game open in more than one tab) */
   private conns = new Map<string, Set<DataConnection>>();
+  /** host: devices that arrived after the start and wait for the host's answer; they get nothing from the game */
+  private waitingConns = new Map<string, DataConnection>();
   /** tests only: drop this many state broadcasts (to check that phones catch up by themselves) */
   dropStates = 0;
   private allConns(): DataConnection[] { return [...this.conns.values()].flatMap((set) => [...set]); }
@@ -331,8 +344,14 @@ class Store {
   answerLate(device: string, as: 'player' | 'spectator' | 'no') {
     const req = this.s.lateReqs.find((r) => r.device === device);
     this.set({ lateReqs: this.s.lateReqs.filter((r) => r.device !== device) });
+    const conn = this.waitingConns.get(device);
+    this.waitingConns.delete(device);
     if (!req || !this.s.game) return;
-    if (as === 'no') { this.sendDevice(device, { type: 'err', key: 'lateRefused' }); return; }
+    if (as === 'no') { sendFramed(conn, { type: 'err', key: 'lateRefused' } satisfies Msg); return; }
+    if (conn) {
+      if (!this.conns.has(device)) this.conns.set(device, new Set());
+      this.conns.get(device)!.add(conn);
+    }
     if (req.photo) this.set({ photos: { ...this.s.photos, [req.player.id]: req.photo } });
     this.sendDevice(device, { type: 'photos', photos: this.s.photos });
     this.sendDevice(device, { type: 'chatlog', msgs: this.s.chat.slice(-100) });
@@ -414,8 +433,35 @@ class Store {
   }
   private stopTimers() { this.timers.forEach((t) => clearInterval(t)); this.timers = []; }
 
+  private lastSupersedeCheck = 0;
+  /**
+   * host with nobody connected while other phones play: maybe the others moved on to a new host
+   * (we were away). If a newer host answers, join it as an ordinary player, so there are never two games.
+   */
+  private checkSuperseded(now: number) {
+    const g = this.s.game;
+    const peer = this.peer;
+    if (!g || g.over || !peer || peer.disconnected || peer.destroyed || this.allConns().length > 0) return;
+    if (!g.players.some((p) => !p.out && p.device !== this.s.device)) return;
+    if (now - this.lastSupersedeCheck < 10_000) return;
+    this.lastSupersedeCheck = now;
+    const { room, gen } = this.s;
+    const conn = peer.connect(peerId(room, gen + 1), { reliable: true, serialization: 'json' });
+    const to = window.setTimeout(() => conn.close(), 8000);
+    conn.on('open', () => {
+      window.clearTimeout(to);
+      conn.close();
+      netlog('superseded', `a newer host at ${gen + 1}: joining it`);
+      this.clearPeer();
+      this.stopTimers();
+      this.set({ mode: 'client', presence: {} });
+      this.connectClient(room, gen + 1, true);
+    });
+  }
+
   private hostHeartbeat() {
     const now = Date.now();
+    this.checkSuperseded(now);
     if (this.peer && !this.peer.destroyed && this.peer.disconnected) this.keepSignalling(this.peer);
     const g = this.s.game;
     // presence
@@ -523,21 +569,26 @@ class Store {
     conn.on('data', receiveFramed<unknown>((raw) => {
       const m = raw as Msg;
       if (device) this.lastSeen.set(device, Date.now());
+      // someone waiting for the host's answer may only ask to join (no game data, no moves, no chat)
+      if (m.type !== 'hello' && m.type !== 'latereq' && m.type !== 'ping' && device && this.waitingConns.get(device) === conn) return;
       switch (m.type) {
         case 'hello': {
           device = m.device;
+          this.waitingConns.delete(device);
           // older apps don't send a version: they can't read split messages, so they would get stuck
           this.set({ versions: { ...this.s.versions, [device]: m.ver ?? 'old' } });
           netlog('hello', `${device} v${m.ver ?? 'old'}`);
-          if (!this.conns.has(device)) this.conns.set(device, new Set());
-          this.conns.get(device)!.add(conn);
           this.lastSeen.set(device, Date.now());
           const g = this.s.game;
+          const admitted = !g || g.players.some((p) => p.device === device && !p.out) || device in this.s.spectators;
+          if (admitted) {
+            if (!this.conns.has(device)) this.conns.set(device, new Set());
+            this.conns.get(device)!.add(conn);
+          }
           if (g) {
-            const isPlayer = g.players.some((p) => p.device === device && !p.out);
-            const isSpectator = device in this.s.spectators;
-            if (!isPlayer && !isSpectator) {
-              // the game has started: they may ask to join (the host decides)
+            if (!admitted) {
+              // the game has started: they may ask to join (the host decides); until then they get no game updates
+              this.waitingConns.set(device, conn);
               sendFramed(conn, { type: 'late', players: g.players.filter((p) => !p.out).map(({ id, name, color, emoji, device: d }) => ({ id, name, color, emoji, device: d })) } satisfies Msg);
               return;
             }
@@ -600,6 +651,10 @@ class Store {
     }));
     conn.on('error', (e) => netlog('conn-error', `${device || '?'}: ${String((e as Error)?.message ?? e)}`));
     conn.on('close', () => {
+      if (device && this.waitingConns.get(device) === conn) {
+        this.waitingConns.delete(device);
+        this.set({ lateReqs: this.s.lateReqs.filter((r) => r.device !== device) });
+      }
       if (device) {
         const set = this.conns.get(device);
         set?.delete(conn);
@@ -717,6 +772,8 @@ class Store {
     // watchdog: host pings every 5 s
     this.stopTimers();
     this.timers.push(window.setInterval(() => {
+      this.checkSuccession();
+      if (this.s.mode !== 'client') return;
       sendFramed(this.hostConn, { type: 'ping' } satisfies Msg);
       if (this.s.net === 'ok' && Date.now() - this.lastHostMsg > 30000) {
         this.hostConn?.close();
@@ -724,6 +781,30 @@ class Store {
         this.onHostLost();
       }
     }, 2000));
+  }
+
+  /** devices that would take over, in player order: active players other than the lost host */
+  successors(): string[] {
+    const g = this.s.game;
+    if (!g) return [];
+    const out: string[] = [];
+    for (const p of g.players) {
+      if (p.out || p.device === this.s.hostDevice || out.includes(p.device)) continue;
+      out.push(p.device);
+    }
+    return out;
+  }
+
+  /** client: the host has been gone long enough and it's our turn to take over */
+  private checkSuccession() {
+    const { net, game, lostSince, device } = this.s;
+    if (net !== 'lost' || !game || game.over || !lostSince) return;
+    const rank = this.successors().indexOf(device);
+    if (rank < 0) return;
+    if (Date.now() - lostSince >= TAKEOVER_MS * (rank + 1)) {
+      netlog('takeover', `automatic, rank ${rank}`);
+      this.takeOver();
+    }
   }
 
   private markLost() {

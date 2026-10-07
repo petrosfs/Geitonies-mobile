@@ -155,3 +155,38 @@ export function kaching() {
     });
   });
 }
+
+/** a short tone with a quick attack and a smooth fade */
+function tone(f: number, at: number, dur: number, vol: number, type: OscillatorType = 'triangle', slideTo?: number) {
+  if (!ctx || ctx.state !== 'running') return;
+  const t = ctx.currentTime + at;
+  const o = ctx.createOscillator();
+  const g = ctx.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(f, t);
+  if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol, t + 0.015);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(ctx.destination);
+  o.start(t);
+  o.stop(t + dur + 0.05);
+}
+
+/** landing on Start: a bright rising fanfare */
+export function fanfare() {
+  [[523, 0], [659, 0.1], [784, 0.2], [1047, 0.32]].forEach(([f, at]) => tone(f, at, at > 0.3 ? 0.55 : 0.18, 0.09));
+  tone(1568, 0.32, 0.5, 0.025, 'sine');
+}
+
+/** paying tax: a sad two-step "womp womp" */
+export function taxSound() {
+  tone(392, 0, 0.32, 0.1, 'sawtooth', 370);
+  tone(311, 0.34, 0.6, 0.1, 'sawtooth', 262);
+}
+
+/** Free Parking with nothing to collect: a soft two-note chime */
+export function chime() {
+  tone(880, 0, 0.6, 0.06, 'sine');
+  tone(1319, 0.12, 0.8, 0.05, 'sine');
+}

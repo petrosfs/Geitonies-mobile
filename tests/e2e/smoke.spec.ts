@@ -182,6 +182,46 @@ test("prices: change a property's price in the setup and buy it at that price", 
   expect(errors).toEqual([]);
 });
 
+test('names and prices: separate reset buttons', async ({ page }) => {
+  const errors = watchErrors(page);
+  await freshStart(page, { fx: { gfx: '2d', sound: false, vibrate: false, shake: false, cinema: false } });
+  await page.getByText('Νέα παρτίδα σε αυτό το κινητό').click();
+  await page.getByRole('button', { name: /Ονόματα/ }).click();
+  const resetPrices = page.getByRole('button', { name: /Επαναφορά τιμών/ });
+  await expect(resetPrices).toBeDisabled();
+  const price = page.locator('.name-group').first().locator('.price-in').first();
+  const name = page.locator('.name-row .name-in').first();
+  await price.fill('90'); await price.blur();
+  await name.fill('Δοκιμή'); await name.blur();
+  // resetting the names keeps the prices
+  await page.getByRole('button', { name: /Επαναφορά ονομάτων/ }).click();
+  await expect(name).toHaveValue('');
+  await expect(price).toHaveValue('90');
+  // and resetting the prices keeps the names
+  await name.fill('Δοκιμή'); await name.blur();
+  await resetPrices.click();
+  await expect(price).toHaveValue('');
+  await expect(name).toHaveValue('Δοκιμή');
+  await expect(resetPrices).toBeDisabled();
+  expect(errors).toEqual([]);
+});
+
+test('board contrast: the slider in the game menu, saved and applied', async ({ page }) => {
+  const errors = watchErrors(page);
+  await freshStart(page, { fx: { gfx: '2d', sound: false, vibrate: false, shake: false, cinema: false } });
+  await newLocalGame(page, ['Α', 'Β']);
+  await page.locator('button', { hasText: '✕' }).first().click();
+  const slider = page.getByRole('slider', { name: 'Αντίθεση ταμπλό' });
+  await slider.fill('130');
+  await expect(page.locator('.screen.game')).toHaveClass(/contrasted/);
+  await expect(page.locator('.board')).toHaveCSS('filter', /contrast\(1\.3\)/);
+  const fx = await page.evaluate(() => JSON.parse(localStorage.getItem('gtn-prefs')!).fx);
+  expect(fx.contrast).toBe(130);
+  await page.locator('.contrast-row button').click();
+  await expect(page.locator('.screen.game')).not.toHaveClass(/contrasted/);
+  expect(errors).toEqual([]);
+});
+
 test('landing on someone else\'s property: the rent card', async ({ page }) => {
   const errors = watchErrors(page);
   await freshStart(page, { fx: { gfx: '2d', sound: false, vibrate: false, shake: false, cinema: false } });

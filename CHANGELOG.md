@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.10.0
+- Sharper board text: a larger board picture (3072 px on phones, 4096 px on computers), the best angle filtering the device offers, and slightly bigger, bolder names and prices.
+- Animations with sound for paying tax, landing on Start and landing on Free Parking (with or without the pot), next to the rent one; the square flashes on the 3D board.
+- Cards are shown to everyone: the card of the current turn appears top left on every phone, and the history says which card it was. Only the player who drew it gets the big card.
+- Online: if the host leaves for good, the game goes on. After 30 seconds the next player becomes host by themselves (then the one after, if they are gone too); any player can also take over by hand after 10 seconds. A host who comes back later joins as a normal player.
+- Board contrast slider (80–150 %) in the ✕ menu and the device settings, for the 3D and 2D board.
+- Setup → Names & prices: separate buttons to reset the names and to reset the prices (the old one reset both).
+- Fix (computers): the buttons for the square the piece was heading to flashed for a moment before the piece arrived; they now appear when it lands.
+- Fix: the history showed a card's text twice.
+- Fix (online): someone joining a game in progress could see the game before the host answered; they now get nothing until the host lets them in.
+- Tests can run against a local signalling server (`VITE_PEER_SERVER=host:port`) where the public one isn't reachable.
+
 ## 1.9.0
 - Join an online game that has already started: the newcomer asks, the host lets them in as a player (starting money, on Start, playing last) or as a spectator (watches and chats), or says no.
 - Guests in the lobby can see the host's settings (board, names & prices, cards, rules), locked.

@@ -11,7 +11,7 @@ import { canUseCamera, COLORS, EMOJIS, readPhoto, useStore, useT } from './ui';
 import { Avatar, PieceIcon } from './components';
 import { CameraSheet } from './Camera';
 import { pieceText } from './three/pieces';
-import { LightPicker, VersionWarning } from './Game';
+import { ContrastPicker, LightPicker, VersionWarning } from './Game';
 
 const newId = () => Math.random().toString(36).slice(2, 10);
 
@@ -337,7 +337,11 @@ function NamesTab({ setup, set }: { setup: Setup; set: (p: Partial<Setup>) => vo
         {utils.map((i) => row(i, <span className="chip">💡</span>, false))}
       </div>
       <p className="muted small">{t('namesHelp')} {t('pricesHelp')}</p>
-      <button className="btn ghost" onClick={() => { setPicked(null); set({ names: [], nameMap: undefined, prices: undefined }); }}>{t('resetNames')}</button>
+      <div className="row reset-row">
+        <button className="btn ghost" onClick={() => { setPicked(null); set({ names: [], nameMap: undefined }); }}>↺ {t('resetNames')}</button>
+        <button className="btn ghost" disabled={!setup.prices || !Object.keys(setup.prices).length}
+          onClick={() => set({ prices: undefined })}>↺ {t('resetPrices')}</button>
+      </div>
     </div>
   );
 }
@@ -651,6 +655,7 @@ export function DeviceSettings() {
       </div>
       
       <LightPicker />
+      <ContrastPicker />
       <label className="check"><input type="checkbox" checked={fx.cinema} onChange={(e) => store.setFx({ cinema: e.target.checked })} />{t('fxCinema')}</label>
       <label className="check"><input type="checkbox" checked={fx.sound} onChange={(e) => store.setFx({ sound: e.target.checked })} />{t('fxSound')}</label>
       <label className="check"><input type="checkbox" checked={fx.vibrate} onChange={(e) => store.setFx({ vibrate: e.target.checked })} />{t('fxVibrate')}</label>

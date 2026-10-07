@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Board3D } from './Board3D';
 import { RulesSheet } from './Rules';
+import { boardEvents, turnCard, type BoardEvent } from './events';
 import { ReportSheet } from './Report';
-import { buzz, hasWebGL, kaching, listenShake, requestMotion, siren, unlockAudio } from './fx';
-import { CHAT_MAX, store, TAKEOVER_MS } from './store';
+import { buzz, chime, fanfare, hasWebGL, kaching, listenShake, requestMotion, siren, taxSound, unlockAudio } from './fx';
+import { CHAT_MAX, clampContrast, CONTRAST_MAX, CONTRAST_MIN, MANUAL_TAKEOVER_MS, store, TAKEOVER_MS } from './store';
 import {
   bankStock, board, curP, hasMonopoly, netWorth, ownedBy, priceOf, rentFor, sqName, unmortgageCost, waiting,
 } from './game/engine';
@@ -59,7 +60,7 @@ export function GameScreen() {
   const seqRef = useRef(g.logSeq ?? 0);
   const [calm, setCalm] = useState(true);
   const [jailQueue, setJailQueue] = useState<string[]>([]);
-  const [rentQueue, setRentQueue] = useState<{ p: string; o: string; n: number; sq: number }[]>([]);
+  const [rentQueue, setRentQueue] = useState<BoardEvent[]>([]);
   useEffect(() => {
     const seq = g.logSeq ?? 0;
     const fresh = Math.min(Math.max(0, seq - seqRef.current), g.log.length);
@@ -69,9 +70,8 @@ export function GameScreen() {
     if (use3d && recent.some((e) => e.k === 'moved' || e.k === 'rolled')) setCalm(() => false);
     const names = recent.filter((e) => e.k === 'jailed').map((e) => playerName(g, String(e.a?.p)));
     if (names.length) { setCalm(() => false); setJailQueue((q) => [...q, ...names]); }
-    const rents = recent.filter((e) => e.k === 'rent' && Number(e.a?.n) > 0)
-      .map((e) => ({ p: String(e.a?.p), o: String(e.a?.o), n: Number(e.a?.n), sq: Number(e.a?.sq) }));
-    if (rents.length) { setCalm(() => false); setRentQueue((q) => [...q, ...rents]); }
+    const events = boardEvents(g, recent);
+    if (events.length) { setCalm(() => false); setRentQueue((q) => [...q, ...events]); }
   }, [g, use3d]);
   // which roll the 3D board has finished showing: money and banners wait for the piece to arrive
   const rollsNow = g.rolls ?? 0;
@@ -94,7 +94,7 @@ export function GameScreen() {
   const rentNow = calm && !busy && !pendingMove && !jailNow ? rentQueue[0] : undefined;
   useEffect(() => {
     if (!rentNow) return;
-    if (s.fx.sound) kaching();
+    if (s.fx.sound) ({ rent: kaching, tax: taxSound, go: fanfare, parking: rentNow.n > 0 ? kaching : chime })[rentNow.kind]();
     if (s.fx.vibrate) buzz(40);
     const id = window.setTimeout(() => setRentQueue((q) => q.slice(1)), 2400);
     return () => clearTimeout(id);
@@ -166,6 +166,7 @@ export function GameScreen() {
       {remaining !== null && (
         <div className={'small' + (g.timeUp ? ' warn' : '')}>{g.timeUp ? t('lastRound') : t('timeLeft', { t: fmtTime(remaining) })}</div>
       )}
+      <TurnCard g={g} />
       <ul className="ticker">
         {lastLog.map((e, i) => <li key={g.log.length - i}>{logText(g, e, lang)}</li>)}
       </ul>
@@ -173,7 +174,8 @@ export function GameScreen() {
   );
 
   return (
-    <div className={'screen game light-' + (s.fx.light ?? 'normal')} onPointerDown={unlockAudio}>
+    <div className={'screen game light-' + (s.fx.light ?? 'normal') + ((s.fx.contrast ?? 100) !== 100 ? ' contrasted' : '')}
+      style={{ ['--contrast' as string]: (s.fx.contrast ?? 100) / 100 }} onPointerDown={unlockAudio}>
       <header className="bar gamebar">
         <button className="btn ghost small" aria-label={t('menu')} onClick={() => setMenu(true)}>✕</button>
         <div className="cashes">
@@ -213,6 +215,7 @@ export function GameScreen() {
               <div className={'small' + (g.timeUp ? ' warn' : '')}>{g.timeUp ? t('lastRound') : t('timeLeft', { t: fmtTime(remaining) })}</div>
             )}
             {lastLog[0] && <div className="small ticker1">{logText(g, lastLog[0], lang)}</div>}
+            <TurnCard g={g} />
           </div>
         } />
       ) : (
@@ -226,28 +229,10 @@ export function GameScreen() {
         </div>
       )}
 
-      {rentNow && (() => {
-        const payer = g.players.find((x) => x.id === rentNow.p);
-        const owner = g.players.find((x) => x.id === rentNow.o);
-        return (
-          <div className="rentbanner" aria-live="polite">
-            <div className="coins" aria-hidden>{Array.from({ length: 10 }, (_, i) => <span key={i} style={{ left: `${6 + i * 9.5}%`, animationDelay: `${(i % 5) * 90}ms` }}>🪙</span>)}</div>
-            <div className="rentcard" style={{ borderColor: owner?.color }}>
-              <div className="rent-title">🏠 {t('rentTitle')}</div>
-              <div className="rent-amount">{m(rentNow.n)}</div>
-              <div className="rent-who">
-                {payer && <PieceIcon id={payer.emoji} color={payer.color} size={26} />} <span style={{ color: payer?.color }}>{payer?.name}</span>
-                <span className="arrow">→</span>
-                {owner && <PieceIcon id={owner.emoji} color={owner.color} size={26} />} <span style={{ color: owner?.color }}>{owner?.name}</span>
-              </div>
-              <div className="small muted">{sqName(g, rentNow.sq, lang)}</div>
-            </div>
-          </div>
-        );
-      })()}
+      {rentNow && <EventCard g={g} ev={rentNow} />}
 
       <section className="actions">
-        {busy ? <p className="muted center">🎲 {t('rolling')}</p> : needHandoff ? null : openAuction ? (
+        {busy || pendingMove ? <p className="muted center">🎲 {t('rolling')}</p> : needHandoff ? null : openAuction ? (
           <OpenAuction g={g} a={head as Auction} local={local} />
         ) : actor ? (
           <ActorPanel g={g} id={actor} onTrade={() => setSheet('trade')} />
@@ -274,7 +259,7 @@ export function GameScreen() {
           <Handoff p={g.players.find((p) => p.id === actor)!} photo={s.photos[actor]} onOk={() => setConfirmed(actor)} />
         </Modal>
       )}
-      {!busy && !needHandoff && actor && head?.k === 'card' && head.who === actor && <CardModal g={g} p={head} />}
+      {!busy && !pendingMove && !needHandoff && actor && head?.k === 'card' && head.who === actor && <CardModal g={g} p={head} />}
       {!busy && !needHandoff && actor && head?.k === 'rename' && head.who === actor && <RenameModal g={g} sq={head.sq} who={actor} />}
       {!busy && !needHandoff && actor && !head && g.trade?.to === actor && sheet !== 'trade' && (
         <TradeResponse g={g} tr={g.trade} onCounter={() => { setCounterOf(g.trade); setSheet('trade'); }} />
@@ -286,7 +271,7 @@ export function GameScreen() {
           <h2>{t('log')}</h2>
           <ul className="loglist">
             {g.log.slice().reverse().map((e, i) => (
-              <li key={i}>{logText(g, e, lang)}{e.k === 'card' && e.a?.c !== undefined ? `: ${cardText(g, g.cards[Number(e.a.c)], lang)}` : ''}</li>
+              <li key={i}>{logText(g, e, lang)}</li>
             ))}
           </ul>
           <button className="btn wide" onClick={() => setSheet('none')}>{t('close')}</button>
@@ -303,6 +288,7 @@ export function GameScreen() {
           <button className="btn primary wide" onClick={() => setMenu(false)}>{t('continueGame')}</button>
           <button className="btn wide" onClick={() => { setMenu(false); setShowRules(true); }}>📖 {t('rules')}</button>
           <LightPicker />
+          <ContrastPicker />
           <button className="btn wide ghost" onClick={() => { setMenu(false); setShowReport(true); }}>🛠️ {t('report')}</button>
           {s.mode !== 'local' && (
             <button className="btn wide" onClick={() => { store.reconnect(); setMenu(false); }}>🔄 {t('reconnect')}</button>
@@ -739,6 +725,51 @@ function TradeResponse({ g, tr, onCounter }: { g: Game; tr: Trade; onCounter: ()
   );
 }
 
+// ---------------- the card of this turn, shown to everyone ----------------
+
+function TurnCard({ g }: { g: Game }) {
+  const { t, lang } = useT();
+  const tc = turnCard(g);
+  if (!tc) return null;
+  const p = g.players.find((x) => x.id === tc.who);
+  return (
+    <div className={'turncard ' + tc.card.deck} key={tc.card.id}>
+      <div className="tc-head">🃏 {t('cardTitle_' + tc.card.deck)} · <strong style={{ color: p?.color }}>{p?.name}</strong></div>
+      <div className="tc-text">{cardText(g, tc.card, lang)}</div>
+    </div>
+  );
+}
+
+// ---------------- board events: rent, tax, Start, Parking ----------------
+
+function EventCard({ g, ev }: { g: Game; ev: BoardEvent }) {
+  const { t, m, lang } = useT();
+  const who = g.players.find((x) => x.id === ev.p);
+  const owner = ev.o ? g.players.find((x) => x.id === ev.o) : undefined;
+  const look = {
+    rent: { icon: '🏠', title: t('rentTitle'), color: owner?.color, sign: '', rain: '🪙' },
+    tax: { icon: '🧾', title: t('taxTitle'), color: '#e5484d', sign: '−', rain: '💸' },
+    go: { icon: '🏁', title: t('goTitle'), color: '#f4b33d', sign: '+', rain: '⭐' },
+    parking: { icon: '🅿️', title: t('parkingTitle'), color: '#30a46c', sign: '+', rain: ev.n > 0 ? '🪙' : '🌿' },
+  }[ev.kind];
+  return (
+    <div className={'rentbanner ev-' + ev.kind} aria-live="polite">
+      <div className="coins" aria-hidden>{Array.from({ length: 10 }, (_, i) => <span key={i} style={{ left: `${6 + i * 9.5}%`, animationDelay: `${(i % 5) * 90}ms` }}>{look.rain}</span>)}</div>
+      <div className="rentcard" style={{ borderColor: look.color }}>
+        <div className="rent-title">{look.icon} {look.title}</div>
+        {ev.n > 0
+          ? <div className={'rent-amount' + (look.sign === '+' ? ' plus' : '')}>{look.sign}{m(ev.n)}</div>
+          : <div className="rent-amount calm">{t('parkingRest')}</div>}
+        <div className="rent-who">
+          {who && <PieceIcon id={who.emoji} color={who.color} size={26} />} <span style={{ color: who?.color }}>{who?.name}</span>
+          {owner && <><span className="arrow">→</span><PieceIcon id={owner.emoji} color={owner.color} size={26} /> <span style={{ color: owner.color }}>{owner.name}</span></>}
+        </div>
+        <div className="small muted">{sqName(g, ev.sq, lang)}</div>
+      </div>
+    </div>
+  );
+}
+
 // ---------------- someone asks to join the game in progress (host) ----------------
 
 function LateRequest({ g, req }: { g: Game; req: { device: string; player: PlayerSetup; photo?: string } }) {
@@ -794,6 +825,22 @@ export function LightPicker() {
         {(['normal', 'dim', 'night'] as const).map((l) => (
           <button key={l} className={cur === l ? 'on' : ''} onClick={() => store.setFx({ light: l })}>{t('light_' + l)}</button>
         ))}
+      </div>
+    </div>
+  );
+}
+
+export function ContrastPicker() {
+  const { t } = useT();
+  const s = useStore();
+  const cur = s.fx.contrast ?? 100;
+  return (
+    <div className="field">
+      <span>◐ {t('boardContrast')}: <b>{cur}%</b></span>
+      <div className="row contrast-row">
+        <input type="range" min={CONTRAST_MIN} max={CONTRAST_MAX} step={5} value={cur} aria-label={t('boardContrast')}
+          onChange={(e) => store.setFx({ contrast: clampContrast(e.target.value) })} />
+        <button className="btn ghost small" disabled={cur === 100} onClick={() => store.setFx({ contrast: 100 })}>↺</button>
       </div>
     </div>
   );
@@ -947,13 +994,19 @@ function HostLost() {
   const { t } = useT();
   const s = useStore();
   const now = useNow();
-  const left = TAKEOVER_MS - (now - s.lostSince);
+  const lost = now - s.lostSince;
+  const order = store.successors();
+  const next = order[0];
+  const nextName = s.game?.players.filter((p) => p.device === next && !p.out).map((p) => p.name).join(', ') ?? '';
+  const left = TAKEOVER_MS - lost;
+  const mine = order.indexOf(s.device);
   return (
     <div className="banner warn">
       <div>{t('hostLost')}</div>
-      {left > 0 ? (
-        <div className="small">{t('takeOverIn', { t: fmtTime(left) })}</div>
-      ) : (
+      {next && left > 0 && (
+        <div className="small">{t(next === s.device ? 'takeOverMeIn' : 'takeOverIn', { t: fmtTime(left), p: nextName })}</div>
+      )}
+      {mine >= 0 && lost >= MANUAL_TAKEOVER_MS && (
         <button className="btn primary" onClick={() => store.takeOver()}>{t('takeOver')}</button>
       )}
     </div>

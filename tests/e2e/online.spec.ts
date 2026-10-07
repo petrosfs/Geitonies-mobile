@@ -264,6 +264,16 @@ test('@online joining a game in progress: the host lets one in as a player and o
   await late.locator('.pedit input').first().fill('Νέα');
   await late.getByRole('button', { name: /Ζήτα να μπεις/ }).click();
   await expect(host.getByText('Νέα θέλει να μπει')).toBeVisible({ timeout: 15_000 });
+  // until the host answers, the newcomer gets nothing from the game, even when the host sends an update
+  await host.evaluate(() => {
+    const st = (window as unknown as { __store: { get: () => { game: { v: number } }; set: (p: object) => void; broadcastState: () => void } }).__store;
+    const g = structuredClone(st.get().game);
+    g.v += 1;
+    st.set({ game: g });
+    st.broadcastState();
+  });
+  await late.waitForTimeout(3000);
+  await expect(late.locator('.gamebar')).toHaveCount(0);
   await host.getByRole('button', { name: /Ως παίκτης/ }).click();
   await expect(late.locator('.gamebar')).toBeVisible({ timeout: 15_000 });
   await expect(host.locator('.cashchip')).toHaveCount(3);
@@ -341,4 +351,147 @@ test('@online long game + open auction with many bids, then end of turn: both ph
   await roller.getByRole('button', { name: 'Τέλος σειράς' }).click();
   await expect.poll(async () => JSON.stringify(await snap(guest)), { timeout: 15_000 }).toBe(JSON.stringify(await snap(host)));
   await expect(guest.locator('.btn.roll, .bidrow, .panel-act')).not.toHaveCount(0);
+});
+
+test('@online a card drawn by one player: everyone sees it top left and in the history; only the drawer gets the big card', async ({ browser }) => {
+  const mk = async (d: string) => {
+    const p = await (await browser.newContext()).newPage();
+    await p.goto('/');
+    await p.evaluate((v) => { localStorage.clear(); localStorage.setItem('gtn-debug', '1'); localStorage.setItem('gtn-prefs', v); },
+      JSON.stringify({ device: d, lang: 'el', fx: { gfx: '2d', sound: false, vibrate: false, shake: false, cinema: false } }));
+    await p.reload();
+    return p;
+  };
+  const host = await mk('h8'), guest = await mk('g8');
+  await host.getByText('Νέα online παρτίδα').click();
+  await host.getByText('Προσθήκη παίκτη').click();
+  await host.locator('.pedit input').first().fill('Petros');
+  await expect(host.locator('.share .muted').last()).toContainText('Οι άλλοι', { timeout: 30_000 });
+  const code = (await host.locator('.code').innerText()).trim();
+  await guest.goto(`/?join=${code}`);
+  await guest.getByText('Προσθήκη παίκτη').click({ timeout: 30_000 });
+  await guest.locator('.pedit input').first().fill('Filos');
+  await guest.getByRole('button', { name: 'Αποθήκευση' }).click();
+  await expect(host.locator('.pcard')).toHaveCount(2);
+  await host.getByText('Έναρξη παιχνιδιού').click();
+  await expect(guest.locator('.gamebar')).toBeVisible();
+
+  type St = { get: () => { game: { cur: number; players: { id: string; device: string }[]; cards: { id: number; fx: { t: string } }[]; q: unknown[]; v: number; rolled: boolean } }; set: (p: object) => void; broadcastState: () => void };
+  // whoever's turn it is draws the "go to jail" card
+  const drawer = await host.evaluate(() => {
+    const st = (window as unknown as { __store: St }).__store;
+    const g = structuredClone(st.get().game);
+    const card = g.cards.find((c) => c.fx.t === 'jail')!;
+    const me = g.players[g.cur];
+    g.q = [{ k: 'card', card: card.id, who: me.id }];
+    g.rolled = true;
+    g.v += 1;
+    st.set({ game: g });
+    st.broadcastState();
+    return me.device;
+  });
+  const [mine, other] = drawer === 'h8' ? [host, guest] : [guest, host];
+  // the other phone: small card top left, no big card
+  await expect(other.locator('.turncard')).toContainText('φυλακή', { timeout: 15_000 });
+  await expect(other.locator('.bigcard')).toHaveCount(0);
+  // the drawer: the big card
+  await expect(mine.locator('.bigcard')).toBeVisible();
+  await mine.locator('.modal .btn.primary').click();
+  // afterwards both still see it, and the history says what it was
+  await expect(other.locator('.turncard')).toContainText('φυλακή', { timeout: 15_000 });
+  await other.getByRole('button', { name: /Ιστορικό/ }).click();
+  await expect(other.locator('.modal')).toContainText(/τράβηξε (Ευκαιρία|Κοινοτικό Ταμείο): «.*φυλακή/);
+});
+
+test('@online the host leaves for good: the next player becomes host by itself and the others play on', async ({ browser }) => {
+  const mk = async (d: string) => {
+    const ctx = await browser.newContext();
+    const p = await ctx.newPage();
+    await p.goto('/');
+    await p.evaluate((v) => {
+      localStorage.clear(); localStorage.setItem('gtn-debug', '1'); localStorage.setItem('gtn-takeover-ms', '6000');
+      localStorage.setItem('gtn-prefs', v);
+    }, JSON.stringify({ device: d, lang: 'el', fx: { gfx: '2d', sound: false, vibrate: false, shake: false, cinema: false } }));
+    await p.reload();
+    return { p, ctx };
+  };
+  const { p: host, ctx: hostCtx } = await mk('h9');
+  const { p: a } = await mk('a9');
+  const { p: b } = await mk('b9');
+  await host.getByText('Νέα online παρτίδα').click();
+  await host.getByText('Προσθήκη παίκτη').click();
+  await host.locator('.pedit input').first().fill('Host');
+  await expect(host.locator('.share .muted').last()).toContainText('Οι άλλοι', { timeout: 30_000 });
+  const code = (await host.locator('.code').innerText()).trim();
+  for (const [p, n] of [[a, 'Alpha'], [b, 'Beta']] as const) {
+    await p.goto(`/?join=${code}`);
+    await p.getByText('Προσθήκη παίκτη').click({ timeout: 30_000 });
+    await p.locator('.pedit input').first().fill(n);
+    await p.getByRole('button', { name: 'Αποθήκευση' }).click();
+  }
+  await expect(host.locator('.pcard')).toHaveCount(3);
+  await host.getByText('Έναρξη παιχνιδιού').click();
+  await expect(a.locator('.gamebar')).toBeVisible();
+  await expect(b.locator('.gamebar')).toBeVisible();
+
+  type St = { get: () => { mode: string; net: string; game: { v: number; cur: number; players: { device: string }[] } }; set: (p: object) => void; broadcastState: () => void };
+  // it's Beta's turn when the host goes away for good
+  await host.evaluate(() => {
+    const st = (window as unknown as { __store: St }).__store;
+    const g = structuredClone(st.get().game);
+    g.cur = g.players.findIndex((p) => p.device === 'b9');
+    g.v += 1;
+    st.set({ game: g });
+    st.broadcastState();
+  });
+  await expect(b.locator('.btn.roll')).toBeVisible({ timeout: 15_000 });
+  await hostCtx.close();
+
+  const info = (p: typeof a) => p.evaluate(() => { const s = (window as unknown as { __store: St }).__store.get(); return { mode: s.mode, net: s.net, v: s.game.v }; });
+  // Alpha (next in the player order) takes over, Beta follows
+  await expect.poll(async () => (await info(a)).mode, { timeout: 60_000 }).toBe('host');
+  await expect.poll(async () => (await info(b)).net, { timeout: 60_000 }).toBe('ok');
+  // the game goes on: Beta rolls and Alpha sees it
+  const before = (await info(a)).v;
+  await b.locator('.btn.roll').click();
+  await expect.poll(async () => (await info(a)).v, { timeout: 15_000 }).toBeGreaterThan(before);
+  await expect.poll(async () => (await info(b)).v === (await info(a)).v, { timeout: 15_000 }).toBe(true);
+});
+
+test('@online the old host comes back after someone took over: it joins the new host (never two games)', async ({ browser }) => {
+  const mk = async (d: string) => {
+    const ctx = await browser.newContext();
+    const p = await ctx.newPage();
+    await p.goto('/');
+    await p.evaluate((v) => {
+      localStorage.clear(); localStorage.setItem('gtn-debug', '1'); localStorage.setItem('gtn-takeover-ms', '6000');
+      localStorage.setItem('gtn-prefs', v);
+    }, JSON.stringify({ device: d, lang: 'el', fx: { gfx: '2d', sound: false, vibrate: false, shake: false, cinema: false } }));
+    await p.reload();
+    return { p, ctx };
+  };
+  const { p: host } = await mk('h10');
+  const { p: a } = await mk('a10');
+  await host.getByText('Νέα online παρτίδα').click();
+  await host.getByText('Προσθήκη παίκτη').click();
+  await host.locator('.pedit input').first().fill('Host');
+  await expect(host.locator('.share .muted').last()).toContainText('Οι άλλοι', { timeout: 30_000 });
+  const code = (await host.locator('.code').innerText()).trim();
+  await a.goto(`/?join=${code}`);
+  await a.getByText('Προσθήκη παίκτη').click({ timeout: 30_000 });
+  await a.locator('.pedit input').first().fill('Alpha');
+  await a.getByRole('button', { name: 'Αποθήκευση' }).click();
+  await expect(host.locator('.pcard')).toHaveCount(2);
+  await host.getByText('Έναρξη παιχνιδιού').click();
+  await expect(a.locator('.gamebar')).toBeVisible();
+
+  type St = { get: () => { mode: string; net: string; gen: number; game: { v: number } }; clearPeer: () => void; stopTimers: () => void; peer: { destroy: () => void } | null };
+  const info = (p: typeof a) => p.evaluate(() => { const s = (window as unknown as { __store: St }).__store.get(); return { mode: s.mode, net: s.net, gen: s.gen, v: s.game?.v }; });
+  // the host's phone goes to sleep (connections drop, nothing runs) long enough for Alpha to take over
+  await host.evaluate(() => { const st = (window as unknown as { __store: St }).__store; st.stopTimers(); st.clearPeer(); st.peer?.destroy(); });
+  await expect.poll(async () => (await info(a)).mode, { timeout: 60_000 }).toBe('host');
+  // it wakes up: the app comes back to the screen
+  await host.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  // back online: the old host finds the new one and joins it as a player
+  await expect.poll(async () => { const i = await info(host); return `${i.mode}/${i.net}/${i.gen}`; }, { timeout: 60_000 }).toBe(`client/ok/${(await info(a)).gen}`);
 });

@@ -63,9 +63,20 @@ export function loadIceServers(): Promise<void> {
   return loading;
 }
 
+/**
+ * Optional own signalling server, set at build time (VITE_PEER_SERVER=host:port), e.g. a local PeerJS
+ * server for tests on a machine that can't reach the public one. Normal builds use the public server.
+ */
+const OWN_SIGNAL = (import.meta.env.VITE_PEER_SERVER as string | undefined)?.trim();
+
 /** options for every new Peer: our relays first, then the public ones */
 export function peerOptions() {
-  return { config: { iceServers: [...extra, ...OWN_ICE, ...DEFAULT_ICE] } };
+  const config = { iceServers: [...extra, ...OWN_ICE, ...DEFAULT_ICE] };
+  if (OWN_SIGNAL) {
+    const [host, port] = OWN_SIGNAL.split(':');
+    return { host, port: Number(port) || 9000, path: '/', secure: false, config };
+  }
+  return { config };
 }
 
 export const hasOwnRelay = () => extra.length > 0 || OWN_ICE.length > 0;

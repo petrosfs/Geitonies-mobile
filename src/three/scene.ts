@@ -149,10 +149,17 @@ export class Scene3D {
     this.scene.add(sun, sun.target);
     this.sunLight = sun;
 
-    this.boardCanvas.width = this.boardCanvas.height = 2048;
+    // sharper text: a bigger board picture where the device can afford it, and the best filtering
+    // for a board seen at an angle (anisotropic). Phones get 3072 px, computers 4096 px.
+    const maxTex = this.renderer.capabilities.maxTextureSize;
+    const mem = (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 4;
+    const roomy = window.matchMedia?.('(min-width: 900px) and (pointer: fine)').matches && mem >= 4;
+    this.boardCanvas.width = this.boardCanvas.height = maxTex >= 8192 && roomy ? 4096 : maxTex >= 4096 && mem >= 2 ? 3072 : 2048;
     this.boardTex = new THREE.CanvasTexture(this.boardCanvas);
     this.boardTex.colorSpace = THREE.SRGBColorSpace;
-    this.boardTex.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
+    this.boardTex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+    this.boardTex.minFilter = THREE.LinearMipmapLinearFilter;
+    this.boardTex.generateMipmaps = true;
     this.boardPlane = new THREE.Mesh(
       new THREE.PlaneGeometry(1, 1),
       new THREE.MeshStandardMaterial({ map: this.boardTex, color: '#e4e9ec', roughness: 0.92, envMapIntensity: 0.25 }),
@@ -510,19 +517,19 @@ export class Scene3D {
         ctx.fillText(CORNER_LABEL[sq.kind]?.[this.lang] ?? '', 0, k * 0.3);
         ctx.restore();
       } else if (sq.kind === 'street') {
-        ctx.font = font(k * 0.15, 600);
-        wrap(ctx, sqName(g, i, this.lang), lw * 0.9, k * 0.17, 3).forEach((line, n, arr) =>
-          ctx.fillText(line, lw / 2, lh * 0.5 + (n - (arr.length - 1) / 2) * k * 0.17));
-        ctx.font = font(k * 0.13, 400);
+        ctx.font = font(k * 0.165, 700);
+        wrap(ctx, sqName(g, i, this.lang), lw * 0.94, k * 0.18, 3).forEach((line, n, arr) =>
+          ctx.fillText(line, lw / 2, lh * 0.5 + (n - (arr.length - 1) / 2) * k * 0.18));
+        ctx.font = font(k * 0.14, 700);
         ctx.fillText(priceOf(g, i) + ' €', lw / 2, lh - k * 0.25);
       } else {
         ctx.font = font(k * 0.36, 400);
         ctx.fillText(ICON[sq.kind] ?? '', lw / 2, lh * 0.36);
-        ctx.font = font(k * 0.12, 600);
+        ctx.font = font(k * 0.13, 700);
         const label = sq.kind === 'station' || sq.kind === 'utility' ? sqName(g, i, this.lang) : sq.name[this.lang];
-        wrap(ctx, label, lw * 0.92, k * 0.14, 2).forEach((line, n) => ctx.fillText(line, lw / 2, lh * 0.66 + n * k * 0.14));
+        wrap(ctx, label, lw * 0.94, k * 0.145, 2).forEach((line, n) => ctx.fillText(line, lw / 2, lh * 0.66 + n * k * 0.145));
         if (sq.price) { ctx.font = font(k * 0.12, 600); ctx.fillText(priceOf(g, i) + ' €', lw / 2, lh - k * 0.23); }
-        if (sq.tax) { ctx.font = font(k * 0.12, 400); ctx.fillText(sq.tax + ' €', lw / 2, lh - k * 0.23); }
+        if (sq.tax) { ctx.font = font(k * 0.12, 600); ctx.fillText(sq.tax + ' €', lw / 2, lh - k * 0.23); }
       }
       if (pr?.mort) {
         ctx.fillStyle = 'rgba(40,50,60,0.45)';
@@ -980,6 +987,15 @@ export class Scene3D {
     this.logSeen = seq;
     for (const e of g.log.slice(g.log.length - fresh)) {
       const a = e.a ?? {};
+      if (e.k === 'moved') {
+        const kind = boardOf(g).squares[Number(a.sq)]?.kind;
+        if (kind === 'go') this.flashQueue.push({ sq: Number(a.sq), color: '#f4b33d' });
+        if (kind === 'parking') this.flashQueue.push({ sq: Number(a.sq), color: '#30a46c' });
+      }
+      if (e.k === 'tax') {
+        const pos = g.players.find((x) => x.id === String(a.p))?.pos;
+        if (pos !== undefined) this.flashQueue.push({ sq: pos, color: '#e5484d' });
+      }
       const n = Number(a.n) || 0;
       if (!n) continue;
       const p = String(a.p ?? '');
