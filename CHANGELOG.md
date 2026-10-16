@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.13.0
+- Online rematch fixes: the rematch now takes its players and settings from the game that just ended, so players who joined during the game are in it (they were left out before), and a player who took over as host starts it with the right players and settings.
+- Only players whose phone is still connected play the rematch; the host's end screen shows who will play.
+- Spectators choose on the end screen: “I'll play” or “I'll watch” in the rematch.
+- If the host leaves after the game has ended, the next player takes over (as during a game), so the rematch can still start.
+- Whoever takes over as host also knows who the spectators are (they no longer have to ask again).
+
 ## 1.12.0
 - Faster first visit: the app comes in pieces. The home screen needs about a third of the code (131 KB instead of 362 KB compressed) and appears ~45 % sooner on a slow mobile connection; the setup, the game, the 3D board, the rules and the QR code are fetched in the background right after. Once the app is installed (or after the first visit) nothing changes.
 - Graphics quality for the 3D board (✕ menu and device settings): Auto, High, Medium, Low. Auto starts at High and steps down by itself only if the board can't keep a smooth frame rate, and only between animations, so no move is cut short. A screen locked at 30 fps (battery saver) is not taken as slowness.

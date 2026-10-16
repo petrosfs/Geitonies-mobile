@@ -1009,10 +1009,25 @@ function GameOver({ g }: { g: Game }) {
       {g.stats && <h3>{t('statsTitle')}</h3>}
       <Awards g={g} />
       <WorthChart g={g} />
+      {s.mode === 'client' && s.net === 'lost' && <HostLost />}
       {s.mode === 'client' ? (
-        <p className="small muted center">{t('rematchWait')}</p>
+        <>
+          {!g.players.some((p) => p.device === s.device) && (
+            <div className="field rematch-choice">
+              <span>{t('rematchSpectator')}</span>
+              <div className="seg">
+                <button className={s.rematchChoice === true ? 'on' : ''} onClick={() => store.wantRematch(true)}>🎲 {t('rematchPlay')}</button>
+                <button className={s.rematchChoice === false ? 'on' : ''} onClick={() => store.wantRematch(false)}>👀 {t('rematchWatch')}</button>
+              </div>
+            </div>
+          )}
+          <p className="small muted center">{t('rematchWait')}</p>
+        </>
       ) : (
         <>
+          {s.mode === 'host' && (
+            <p className="small center rematch-lineup">{t('rematchLineup', { p: store.rematchLineup().map((p) => p.name).join(', ') })}</p>
+          )}
           <button className="btn primary wide" onClick={() => store.rematch()}>🔁 {t('rematch')}</button>
           <p className="small muted center">{t('rematchHint')}</p>
         </>
@@ -1029,7 +1044,7 @@ function HostLost() {
   const lost = now - s.lostSince;
   const order = store.successors();
   const next = order[0];
-  const nextName = s.game?.players.filter((p) => p.device === next && !p.out).map((p) => p.name).join(', ') ?? '';
+  const nextName = s.game?.players.filter((p) => p.device === next && (!p.out || s.game?.over)).map((p) => p.name).join(', ') ?? '';
   const left = TAKEOVER_MS - lost;
   const mine = order.indexOf(s.device);
   return (

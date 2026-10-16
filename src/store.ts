@@ -6,6 +6,7 @@ import { loadIceServers, peerOptions } from './netconfig';
 import { apply, autoAction, newGame, RuleError, waiting } from './game/engine';
 import { BOARDS } from './game/boards';
 import type { Action, Game, Lang, PlayerSetup, Setup } from './game/types';
+import { lookUnique, setupFromGame } from './game/rematch';
 
 export type Mode = 'local' | 'host' | 'client';
 export type Screen = 'home' | 'setup' | 'join' | 'lobby' | 'game' | 'latejoin';
@@ -51,6 +52,12 @@ export interface State {
   lateReqs: { device: string; player: PlayerSetup; photo?: string }[];
   /** host: devices watching the game; each has a name for the chat */
   spectators: Record<string, string>;
+  /** host: the player each spectator filled in when asking to join (used if they choose to play a rematch) */
+  specPlayers: Record<string, PlayerSetup>;
+  /** host: spectators who said they want to play the rematch, by device */
+  rematchJoin: Record<string, PlayerSetup>;
+  /** spectator: what they chose for the rematch (null = not yet) */
+  rematchChoice: boolean | null;
   /** guest: the game had already started; the players in it (to pick a different colour/piece) */
   lateOthers: PlayerSetup[];
   /** guest watching the game (not a player): the name shown in the chat */
@@ -68,7 +75,8 @@ type Msg =
   | { type: 'join'; players: PlayerSetup[] }
   | { type: 'act'; by: string; action: Action }
   | { type: 'lobby'; setup: Setup; photos: Record<string, string>; hostDevice: string; hostVer?: string }
-  | { type: 'state'; game: Game; presence: Record<string, boolean>; hostDevice: string; hostVer?: string }
+  | { type: 'state'; game: Game; presence: Record<string, boolean>; hostDevice: string; hostVer?: string;
+      /** who watches (so whoever takes over as host still knows them) */ spectators?: Record<string, string>; specPlayers?: Record<string, PlayerSetup> }
   | { type: 'photos'; photos: Record<string, string> }
   | { type: 'err'; key: string }
   | { type: 'kicked' }
@@ -80,7 +88,9 @@ type Msg =
   | { type: 'pong' }
   | { type: 'chat'; from: string; text: string }
   | { type: 'chatmsg'; msg: ChatMsg }
-  | { type: 'chatlog'; msgs: ChatMsg[] };
+  | { type: 'chatlog'; msgs: ChatMsg[] }
+  /** spectator: play the rematch or keep watching */
+  | { type: 'rematchPlay'; play: boolean };
 
 // the host gone this long: the next player takes over by themselves (each further one waits once more);
 // a smaller value can be set in localStorage 'gtn-takeover-ms' for testing
@@ -184,6 +194,9 @@ class Store {
       hostVersion: '',
       lateReqs: [],
       spectators: {},
+      specPlayers: {},
+      rematchJoin: {},
+      rematchChoice: null,
       lateOthers: [],
       spectatorName: '',
       joinUntil: 0,
@@ -236,7 +249,7 @@ class Store {
 
   goHome() {
     this.teardown();
-    this.set({ screen: 'home', game: null, net: 'idle', mode: 'local', kicked: false, hasSave: !!readSave()?.game });
+    this.set({ screen: 'home', game: null, net: 'idle', mode: 'local', kicked: false, hasSave: !!readSave()?.game, spectators: {}, specPlayers: {}, rematchJoin: {}, rematchChoice: null });
   }
 
   newLocal() {
@@ -294,15 +307,45 @@ class Store {
     this.startTimers();
   }
 
+  /** is this device here right now? (host's own phone, or connected and heard from lately) */
+  private deviceHere(d: string): boolean {
+    if (this.s.mode !== 'host' || d === this.s.device) return true;
+    return (this.conns.get(d)?.size ?? 0) > 0 && Date.now() - (this.lastSeen.get(d) ?? 0) < 15000;
+  }
+
+  /**
+   * Who plays a rematch: the players of the game that just ended (also those who joined during it,
+   * bankrupt ones too, not the ones the host removed) whose phone is still here, plus spectators who
+   * chose to play. Settings come from that game, so a player who took over as host has them too.
+   */
+  rematchLineup(): PlayerSetup[] {
+    const g = this.s.game;
+    if (!g) return this.s.setup.players;
+    const kicked = new Set(g.log.filter((e) => e.k === 'kicked').map((e) => String(e.a?.p)));
+    const lineup = setupFromGame(g).players.filter((p) => !kicked.has(p.id) && this.deviceHere(p.device));
+    for (const [d, p] of Object.entries(this.s.rematchJoin)) {
+      if (!this.deviceHere(d) || lineup.some((x) => x.id === p.id)) continue;
+      lineup.push(lookUnique({ ...p, device: d }, lineup));
+    }
+    return lineup.slice(0, 10);
+  }
+
   /** same players, same settings, new game (local or host) */
   rematch() {
-    if (this.s.mode === 'client' || !this.s.setup.players.length) return;
-    // everyone plays again (bankrupt players too), except players the host removed
-    const kicked = new Set(this.s.game?.log.filter((e) => e.k === 'kicked').map((e) => String(e.a?.p)));
-    const players = this.s.setup.players.filter((p) => !kicked.has(p.id));
-    if (players.length < 2) { this.goHome(); return; }
-    this.set({ setup: { ...this.s.setup, players } });
+    if (this.s.mode === 'client') return;
+    const g = this.s.game;
+    const players = this.rematchLineup();
+    if (players.length < 2) { this.toast('rematchNeedTwo'); return; }
+    const playing = new Set(players.map((p) => p.device));
+    const spectators = Object.fromEntries(Object.entries(this.s.spectators).filter(([d]) => !playing.has(d)));
+    this.set({ setup: { ...(g ? setupFromGame(g) : this.s.setup), players }, spectators, rematchJoin: {} });
     this.startGame();
+  }
+
+  /** spectator: play the rematch, or keep watching */
+  wantRematch(play: boolean) {
+    this.set({ rematchChoice: play });
+    this.send({ type: 'rematchPlay', play });
   }
 
   // ---------------- actions ----------------
@@ -362,7 +405,10 @@ class Store {
     this.sendDevice(device, { type: 'photos', photos: this.s.photos });
     this.sendDevice(device, { type: 'chatlog', msgs: this.s.chat.slice(-100) });
     if (as === 'spectator') {
-      this.set({ spectators: { ...this.s.spectators, [device]: req.player.name.trim() || '?' } });
+      this.set({
+        spectators: { ...this.s.spectators, [device]: req.player.name.trim() || '?' },
+        specPlayers: { ...this.s.specPlayers, [device]: { ...req.player, device } },
+      });
       this.sendDevice(device, this.stateMsg());
       this.persist();
       return;
@@ -645,6 +691,14 @@ class Store {
         case 'ping':
           sendFramed(conn, { type: 'pong' } satisfies Msg);
           return;
+        case 'rematchPlay': {
+          const p = device && device in this.s.spectators ? this.s.specPlayers[device] : undefined;
+          if (!device || !p) return;
+          const join = { ...this.s.rematchJoin };
+          if (m.play) join[device] = p; else delete join[device];
+          this.set({ rematchJoin: join });
+          return;
+        }
         case 'act': {
           const g = this.s.game;
           const p = g?.players.find((x) => x.id === m.by);
@@ -675,7 +729,7 @@ class Store {
     return { type: 'lobby', setup: this.s.setup, photos: this.s.photos, hostDevice: this.s.device, hostVer: __APP_VERSION__ };
   }
   private stateMsg(): Msg {
-    return { type: 'state', game: this.s.game!, presence: this.s.presence, hostDevice: this.s.device, hostVer: __APP_VERSION__ };
+    return { type: 'state', game: this.s.game!, presence: this.s.presence, hostDevice: this.s.device, hostVer: __APP_VERSION__, spectators: this.s.spectators, specPlayers: this.s.specPlayers };
   }
   private broadcastLobby() {
     const m = this.lobbyMsg();
@@ -789,13 +843,14 @@ class Store {
     }, 2000));
   }
 
-  /** devices that would take over, in player order: active players other than the lost host */
+  /** devices that would take over, in player order: active players other than the lost host
+   * (once the game is over, bankrupt players too: anyone can start the rematch) */
   successors(): string[] {
     const g = this.s.game;
     if (!g) return [];
     const out: string[] = [];
     for (const p of g.players) {
-      if (p.out || p.device === this.s.hostDevice || out.includes(p.device)) continue;
+      if ((p.out && !g.over) || p.device === this.s.hostDevice || out.includes(p.device)) continue;
       out.push(p.device);
     }
     return out;
@@ -804,7 +859,7 @@ class Store {
   /** client: the host has been gone long enough and it's our turn to take over */
   private checkSuccession() {
     const { net, game, lostSince, device } = this.s;
-    if (net !== 'lost' || !game || game.over || !lostSince) return;
+    if (net !== 'lost' || !game || !lostSince) return;
     const rank = this.successors().indexOf(device);
     if (rank < 0) return;
     if (Date.now() - lostSince >= TAKEOVER_MS * (rank + 1)) {
@@ -848,6 +903,8 @@ class Store {
         netlog('state', `v${m.game.v} (had v${this.s.game?.v ?? '-'}) head=${m.game.q[0]?.k ?? '-'}`);
         // the host is the authority: always take its state (messages on one connection arrive in order,
         // and after a reconnect or a host restart the host's copy is the true one)
+        if (m.game.gid !== this.s.game?.gid) this.set({ rematchChoice: null });
+        if (m.spectators) this.set({ spectators: m.spectators, specPlayers: m.specPlayers ?? {} });
         this.set({ game: m.game, presence: m.presence, hostDevice: m.hostDevice, screen: 'game', hostVersion: m.hostVer ?? 'old' });
         this.persist();
         return;

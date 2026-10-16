@@ -122,7 +122,7 @@ const el: RuleSection[] = [
       'Όταν μείνει ένας μόνο παίκτης, αυτός κερδίζει.',
       'Με όριο χρόνου: όταν τελειώσει ο χρόνος, ολοκληρώνεται ο γύρος που παίζεται και κερδίζει όποιος έχει τη μεγαλύτερη αξία.',
       'Αξία = μετρητά + τιμή των ακινήτων (τα υποθηκευμένα μετράνε το μισό) + κόστος των κτιρίων.',
-      'Στο τέλος βλέπετε στατιστικά και μπορείτε να ξεκινήσετε ρεβάνς με τους ίδιους παίκτες.',
+      'Στο τέλος βλέπετε στατιστικά και μπορείτε να ξεκινήσετε ρεβάνς με τις ίδιες ρυθμίσεις. Online παίζουν όσοι είναι συνδεδεμένοι· οι θεατές διαλέγουν αν θα παίξουν.',
     ],
   },
   {
@@ -254,7 +254,7 @@ const en: RuleSection[] = [
       'When only one player is left, they win.',
       'With a time limit: when time is up the current round is finished, and the player worth the most wins.',
       'Worth = cash + property prices (mortgaged ones count half) + the cost of buildings.',
-      'At the end you see statistics and can start a rematch with the same players.',
+      'At the end you see statistics and can start a rematch with the same settings. Online, everyone still connected plays; spectators choose whether to join.',
     ],
   },
   {

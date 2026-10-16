@@ -495,3 +495,116 @@ test('@online the old host comes back after someone took over: it joins the new 
   // back online: the old host finds the new one and joins it as a player
   await expect.poll(async () => { const i = await info(host); return `${i.mode}/${i.net}/${i.gen}`; }, { timeout: 60_000 }).toBe(`client/ok/${(await info(a)).gen}`);
 });
+
+type RSt = { get: () => { mode: string; net: string; room: string; game: { gid: string; v: number; over: unknown; players: { id: string; device: string; name: string }[] } | null }; set: (p: object) => void; broadcastState: () => void };
+const rinfo = (p: import('@playwright/test').Page) => p.evaluate(() => {
+  const s = (window as unknown as { __store: RSt }).__store.get();
+  return { mode: s.mode, net: s.net, room: s.room, gid: s.game?.gid, over: !!s.game?.over, players: s.game?.players.map((x) => x.name) };
+});
+/** the host ends the game (as if the last opponent went bankrupt) */
+const endGame = (p: import('@playwright/test').Page) => p.evaluate(() => {
+  const st = (window as unknown as { __store: RSt }).__store;
+  const g = structuredClone(st.get().game!);
+  g.over = { rank: g.players.map((x) => ({ id: x.id, worth: 1000 })) };
+  g.v += 1;
+  st.set({ game: g });
+  st.broadcastState();
+});
+const phone = async (browser: import('@playwright/test').Browser, d: string) => {
+  const ctx = await browser.newContext();
+  const p = await ctx.newPage();
+  await p.goto('/');
+  await p.evaluate((v) => {
+    localStorage.clear(); localStorage.setItem('gtn-debug', '1'); localStorage.setItem('gtn-takeover-ms', '6000');
+    localStorage.setItem('gtn-prefs', v);
+  }, JSON.stringify({ device: d, lang: 'el', fx: { gfx: '2d', sound: false, vibrate: false, shake: false, cinema: false } }));
+  await p.reload();
+  return { p, ctx };
+};
+const hostRoom = async (host: import('@playwright/test').Page, name: string) => {
+  await host.getByText('Νέα online παρτίδα').click();
+  await host.getByText('Προσθήκη παίκτη').click();
+  await host.locator('.pedit input').first().fill(name);
+  await expect(host.locator('.share .muted').last()).toContainText('Οι άλλοι', { timeout: 30_000 });
+  return (await host.locator('.code').innerText()).trim();
+};
+const joinLobby = async (p: import('@playwright/test').Page, code: string, name: string) => {
+  await p.goto(`/?join=${code}`);
+  await p.getByText('Προσθήκη παίκτη').click({ timeout: 30_000 });
+  await p.locator('.pedit input').first().fill(name);
+  await p.getByRole('button', { name: 'Αποθήκευση' }).click();
+};
+const joinLate = async (p: import('@playwright/test').Page, host: import('@playwright/test').Page, code: string, name: string, as: RegExp) => {
+  await p.goto(`/?join=${code}`);
+  await expect(p.getByText('Η παρτίδα έχει ήδη ξεκινήσει')).toBeVisible({ timeout: 30_000 });
+  await p.getByText('Προσθήκη παίκτη').click();
+  await p.locator('.pedit input').first().fill(name);
+  await p.getByRole('button', { name: /Ζήτα να μπεις/ }).click();
+  await host.getByRole('button', { name: as }).click({ timeout: 15_000 });
+  await expect(p.locator('.gamebar')).toBeVisible({ timeout: 15_000 });
+};
+
+test('@online rematch: everyone still connected plays again in the same room (also who joined mid-game); a spectator chooses; the game code is on every phone', async ({ browser }) => {
+  test.setTimeout(300_000);
+  const { p: host } = await phone(browser, 'hR');
+  const { p: guest } = await phone(browser, 'gR');
+  const { p: leaver, ctx: leaverCtx } = await phone(browser, 'xR');
+  const { p: late } = await phone(browser, 'lR');
+  const { p: watcher } = await phone(browser, 'wR');
+  const code = await hostRoom(host, 'Host');
+  await joinLobby(guest, code, 'Guest');
+  await joinLobby(leaver, code, 'Leaver');
+  await expect(host.locator('.pcard')).toHaveCount(3);
+  await host.getByText('Έναρξη παιχνιδιού').click();
+  await expect(guest.locator('.gamebar')).toBeVisible();
+  await joinLate(late, host, code, 'Late', /Ως παίκτης/);
+  await joinLate(watcher, host, code, 'Watcher', /Ως θεατής/);
+
+  // the game code, in the game, on every phone (players sheet)
+  for (const p of [host, guest, late, watcher]) {
+    await p.locator('nav.dock button', { hasText: 'Παίκτες' }).click();
+    await expect(p.locator('.modal')).toContainText(`Κωδικός παρτίδας: ${code}`);
+    await p.mouse.click(3, 3);
+  }
+
+  await leaverCtx.close(); // one player leaves before the end
+  const before = await rinfo(host);
+  await endGame(host);
+  await watcher.getByRole('button', { name: /Παίζω/ }).click({ timeout: 15_000 });
+  await expect(host.locator('.rematch-lineup')).toHaveText('Στο ρεβάνς θα παίξουν: Host, Guest, Late, Watcher', { timeout: 20_000 });
+  await host.getByRole('button', { name: /Ρεβάνς/ }).click();
+
+  for (const p of [host, guest, late, watcher]) {
+    await expect.poll(async () => (await rinfo(p)).gid, { timeout: 20_000 }).not.toBe(before.gid);
+    const i = await rinfo(p);
+    expect(i).toMatchObject({ room: code, over: false, players: ['Host', 'Guest', 'Late', 'Watcher'] });
+    expect(i.gid).toBe((await rinfo(host)).gid);
+    await expect(p.locator('.cashchip')).toHaveCount(4);
+  }
+});
+
+test('@online the host leaves after the end: the next player takes over and starts the rematch', async ({ browser }) => {
+  test.setTimeout(300_000);
+  const { p: host, ctx: hostCtx } = await phone(browser, 'hT');
+  const { p: a } = await phone(browser, 'aT');
+  const { p: late } = await phone(browser, 'lT');
+  const code = await hostRoom(host, 'Host');
+  await joinLobby(a, code, 'Alpha');
+  await expect(host.locator('.pcard')).toHaveCount(2);
+  await host.getByText('Έναρξη παιχνιδιού').click();
+  await expect(a.locator('.gamebar')).toBeVisible();
+  await joinLate(late, host, code, 'Late', /Ως παίκτης/);
+  await endGame(host);
+  await expect(a.getByText('Ο οικοδεσπότης μπορεί να ξεκινήσει ρεβάνς')).toBeVisible({ timeout: 15_000 });
+  await hostCtx.close();
+  // Alpha takes over by itself, even though the game is over; the code stays the same
+  await expect.poll(async () => (await rinfo(a)).mode, { timeout: 60_000 }).toBe('host');
+  await expect.poll(async () => (await rinfo(late)).net, { timeout: 60_000 }).toBe('ok');
+  const before = await rinfo(a);
+  await expect(a.locator('.rematch-lineup')).toHaveText('Στο ρεβάνς θα παίξουν: Alpha, Late', { timeout: 20_000 });
+  await a.getByRole('button', { name: /Ρεβάνς/ }).click();
+  for (const p of [a, late]) {
+    await expect.poll(async () => (await rinfo(p)).gid, { timeout: 20_000 }).not.toBe(before.gid);
+    expect(await rinfo(p)).toMatchObject({ room: code, over: false, players: ['Alpha', 'Late'] });
+  }
+});
