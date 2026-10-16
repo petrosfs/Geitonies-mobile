@@ -13,3 +13,7 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    # all the workflow tools in one pull request a month
+    groups:
+      actions:
+        patterns: ["*"]

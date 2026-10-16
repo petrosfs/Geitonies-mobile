@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.13.1
+- Tools updated (the game itself is unchanged): TypeScript 7, Vite 8.3.4, vite-plugin-pwa 2, Playwright 1.64, Vitest 5.0.4, oxlint 1.88, and the GitHub Actions used to test and publish. All tests pass with them.
+- Dependabot now groups the GitHub Actions updates into one pull request a month (like the code updates), so at most two update branches appear.
+
 ## 1.13.0
 - Online rematch fixes: the rematch now takes its players and settings from the game that just ended, so players who joined during the game are in it (they were left out before), and a player who took over as host starts it with the right players and settings.
 - Only players whose phone is still connected play the rematch; the host's end screen shows who will play.
