@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.13.2
+- README: a short "Feedback" section linking to the issue forms for ideas and bug reports (the game itself is unchanged).
+
 ## 1.13.1
 - Tools updated (the game itself is unchanged): TypeScript 7, Vite 8.3.4, vite-plugin-pwa 2, Playwright 1.64, Vitest 5.0.4, oxlint 1.88, and the GitHub Actions used to test and publish. All tests pass with them.
 - Dependabot now groups the GitHub Actions updates into one pull request a month (like the code updates), so at most two update branches appear.

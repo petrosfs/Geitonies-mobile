@@ -99,6 +99,10 @@ and bug reports from real games drove each iteration — see the [changelog](CHA
 - Computer opponents (bots) for solo play and to replace players who leave
 - A dedicated relay (TURN) for networks that block peer-to-peer connections
 
+## Feedback
+
+Have an idea or found a bug? [Open an issue](https://github.com/petrosfs/Geitonies-mobile/issues/new/choose) (GitHub account needed) · Ιδέα ή πρόβλημα; Άνοιξε ένα issue.
+
 ## License
 
 © petrosfs. **All rights reserved.** The source code is published so it can be viewed and evaluated;
