@@ -4,6 +4,7 @@ import { RulesSheet } from './Rules';
 import { boardEvents, isUpset, turnCard, type BoardEvent } from './events';
 import { ruleTitle } from './upsets-text';
 import { GFX_QUALITIES } from './three/quality';
+import { COLORS } from './colors';
 import { ReportSheet } from './Report';
 import { buzz, chime, fanfare, hasWebGL, kaching, listenShake, requestMotion, siren, taxSound, unlockAudio } from './fx';
 import { CHAT_MAX, clampContrast, CONTRAST_MAX, CONTRAST_MIN, MANUAL_TAKEOVER_MS, store, TAKEOVER_MS } from './store';
@@ -61,8 +62,11 @@ export function GameScreen() {
   // "X goes to jail!" banner, shown once the 3D animation has finished
   const seqRef = useRef(g.logSeq ?? 0);
   const [calm, setCalm] = useState(true);
-  const [jailQueue, setJailQueue] = useState<string[]>([]);
-  const [rentQueue, setRentQueue] = useState<BoardEvent[]>([]);
+  // each banner remembers which roll it belongs to: a new roll drops the ones not yet shown (or cut short),
+  // so an old payment never pops up after the next move
+  const [jailQueue, setJailQueue] = useState<{ name: string; roll: number }[]>([]);
+  const [rentQueue, setRentQueue] = useState<(BoardEvent & { roll: number })[]>([]);
+  const lastRoll = useRef(g.rolls ?? 0);
   useEffect(() => {
     const seq = g.logSeq ?? 0;
     const fresh = Math.min(Math.max(0, seq - seqRef.current), g.log.length);
@@ -70,9 +74,16 @@ export function GameScreen() {
     const recent = g.log.slice(g.log.length - fresh);
     // a piece is about to move on the 3D board: hold the shown money until it gets there
     if (use3d && recent.some((e) => e.k === 'moved' || e.k === 'rolled')) setCalm(() => false);
-    const names = recent.filter((e) => e.k === 'jailed').map((e) => playerName(g, String(e.a?.p)));
+    const roll = g.rolls ?? 0;
+    if (roll !== lastRoll.current) {
+      // a new roll: banners of earlier rolls are out of date
+      lastRoll.current = roll;
+      setRentQueue((q) => q.filter((e) => e.roll >= roll));
+      setJailQueue((q) => q.filter((e) => e.roll >= roll));
+    }
+    const names = recent.filter((e) => e.k === 'jailed').map((e) => ({ name: playerName(g, String(e.a?.p)), roll }));
     if (names.length) { setCalm(() => false); setJailQueue((q) => [...q, ...names]); }
-    const events = boardEvents(g, recent);
+    const events = boardEvents(g, recent).map((e) => ({ ...e, roll }));
     if (events.length) { setCalm(() => false); setRentQueue((q) => [...q, ...events]); }
   }, [g, use3d]);
   // which roll the 3D board has finished showing: money and banners wait for the piece to arrive
@@ -92,7 +103,7 @@ export function GameScreen() {
     const id = window.setTimeout(() => setCalm(true), use3d ? 350 : 0);
     return () => clearTimeout(id);
   }, [busy, use3d, g.v]);
-  const jailNow = calm && !busy && !pendingMove ? jailQueue[0] : undefined;
+  const jailNow = calm && !busy && !pendingMove ? jailQueue[0]?.name : undefined;
   const rentNow = calm && !busy && !pendingMove && !jailNow ? rentQueue[0] : undefined;
   useEffect(() => {
     if (!rentNow) return;
@@ -153,7 +164,13 @@ export function GameScreen() {
     ? g.rules.timeLimitMin * 60000 - (g.clock.elapsed + Math.max(0, Math.min(now - g.clock.last, 120000)))
     : null;
 
-  const lastLog = g.log.slice(-3).reverse();
+  // the latest moves, as of the moment the board shows them (not before the piece gets there)
+  const seqNow = g.logSeq ?? g.log.length;
+  const [shownSeq, setShownSeq] = useState(seqNow);
+  const boardStill = calm && !busy && !pendingMove;
+  if (boardStill && shownSeq !== seqNow) setShownSeq(seqNow); // catch up once the board is still
+  const visibleLog = g.log.slice(0, Math.max(0, g.log.length - Math.max(0, seqNow - shownSeq)));
+  const lastLog = visibleLog.slice(-4).reverse();
 
   const center = (
     <div className="center-in">
@@ -170,7 +187,7 @@ export function GameScreen() {
       )}
       <TurnCard g={g} />
       <ul className="ticker">
-        {lastLog.map((e, i) => <li key={g.log.length - i}>{logText(g, e, lang)}</li>)}
+        {lastLog.slice(0, 3).map((e, i) => <li key={shownSeq - i}>{logText(g, e, lang)}</li>)}
       </ul>
     </div>
   );
@@ -217,7 +234,11 @@ export function GameScreen() {
             {remaining !== null && (
               <div className={'small' + (g.timeUp ? ' warn' : '')}>{g.timeUp ? t('lastRound') : t('timeLeft', { t: fmtTime(remaining) })}</div>
             )}
-            {lastLog[0] && <div className="small ticker1">{logText(g, lastLog[0], lang)}</div>}
+            {lastLog.length > 0 && (
+              <ul className="ticker3d small">
+                {lastLog.map((e, i) => <li key={shownSeq - i}>{logText(g, e, lang)}</li>)}
+              </ul>
+            )}
             <TurnCard g={g} />
           </div>
         } />
@@ -593,6 +614,8 @@ function PropsSheet({ g, id, onClose }: { g: Game; id: string; onClose: () => vo
 function PlayersSheet({ g, onClose }: { g: Game; onClose: () => void }) {
   const s = useStore();
   const { t, m } = useT();
+  const [recolor, setRecolor] = useState<string | null>(null);
+  const canRecolor = (p: Game['players'][number]) => !p.out && !g.over && (s.mode === 'local' || p.device === s.device);
   return (
     <Modal onClose={onClose}>
       <h2>{t('players')}</h2>
@@ -612,8 +635,23 @@ function PlayersSheet({ g, onClose }: { g: Game; onClose: () => void }) {
                 </div>
               )}
             </div>
+            {canRecolor(p) && (
+              <button className="btn ghost small" aria-label={t('changeColor')} onClick={() => setRecolor(recolor === p.id ? null : p.id)}>🎨</button>
+            )}
             {s.mode === 'host' && !p.out && p.device !== s.device && (
               <button className="btn danger ghost small" onClick={() => store.confirm({ key: 'kickConfirm', params: { p: p.name }, yes: 'kick', danger: true, onYes: () => store.kick(p.id) })}>{t('kick')}</button>
+            )}
+            {recolor === p.id && (
+              <div className="swatches recolor" role="group" aria-label={t('changeColor')}>
+                {COLORS.map((c) => {
+                  const taken = g.players.some((o) => o.id !== p.id && o.color === c);
+                  return (
+                    <button key={c} className={'swatch' + (p.color === c ? ' on' : '') + (taken ? ' taken' : '')} style={{ background: c }}
+                      disabled={taken} aria-label={taken ? t('colorTaken') : c}
+                      onClick={() => { store.act(p.id, { t: 'setColor', color: c }); setRecolor(null); }} />
+                  );
+                })}
+              </div>
             )}
           </li>
         ))}

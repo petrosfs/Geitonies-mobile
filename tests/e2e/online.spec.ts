@@ -141,6 +141,8 @@ test('@online a phone stuck on an old screen catches up with the host', async ({
   await expect(guest.locator('.gamebar')).toBeVisible();
 
   type W = { __store: { get: () => { game: { v: number; q: unknown[] } }; set: (p: object) => void } };
+  // let the first updates after the start arrive (they would replace the copy below before the click)
+  await guest.waitForTimeout(3000);
   // the friend's screen is stuck on an old, "newer-numbered" copy showing an auction
   await guest.evaluate(() => {
     const st = (window as unknown as W).__store;

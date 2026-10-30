@@ -300,6 +300,113 @@ test('a piece of the app fails to load: one reload by itself, then a message (no
   await ctx.close();
 });
 
+test('3D: a banner cut short by the next roll never comes back after that move', async ({ page }) => {
+  const errors = watchErrors(page);
+  await freshStart(page, { fx: { gfx: '3d', sound: false, vibrate: false, shake: false, cinema: false, quality: 'low' } });
+  await page.evaluate(() => localStorage.setItem('gtn-debug', '1'));
+  await page.reload();
+  await newLocalGame(page, ['Α', 'Β']);
+  if (await page.locator('.handoff .btn').count()) await page.locator('.handoff .btn').click();
+  // the player in turn stands before Start; the first street belongs to the other one; dice: 1+1 (doubles), then 2+3
+  await page.evaluate(() => {
+    type G = { players: { id: string; pos: number }[]; cur: number; props: Record<number, { owner: string | null }>; rng: number; v: number };
+    const st = (window as unknown as { __store: { get: () => { game: G }; set: (p: object) => void } }).__store;
+    const g = structuredClone(st.get().game);
+    const me = g.players[g.cur], other = g.players[1 - g.cur];
+    me.pos = 39; g.props[1].owner = other.id; g.rng = 3998; g.v++;
+    st.set({ game: g });
+  });
+  await page.waitForTimeout(1500);
+  await page.locator('.btn.roll').click();
+  await expect(page.locator('.rentbanner.ev-rent')).toBeVisible({ timeout: 40_000 });
+  await page.locator('.btn.roll').click(); // doubles: roll again while the rent card is still up
+  // the second move ends on a free street (buy offer); the old rent card must not show up again
+  await expect(page.getByRole('button', { name: /Αγορά/ })).toBeVisible({ timeout: 60_000 });
+  const seen: string[] = [];
+  for (let i = 0; i < 30; i++) {
+    seen.push(...(await page.locator('.rentbanner').evaluateAll((els) => els.map((e) => e.className))));
+    await page.waitForTimeout(100);
+  }
+  expect(seen).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test('3D zoom goes toward the point under the mouse; the camera stays over the board; 🎯 brings it back', async ({ page }) => {
+  const errors = watchErrors(page);
+  await freshStart(page, { fx: { gfx: '3d', sound: false, vibrate: false, shake: false, cinema: false, quality: 'low' } });
+  await page.evaluate(() => localStorage.setItem('gtn-debug', '1'));
+  await page.reload();
+  await newLocalGame(page, ['Α', 'Β']);
+  if (await page.locator('.handoff .btn').count()) await page.locator('.handoff .btn').click();
+  await page.waitForTimeout(2500);
+  type Sc = { controls: { target: { x: number; y: number; z: number } }; follow: boolean; W: number };
+  const cam = () => page.evaluate(() => { const sc = (window as unknown as { __scene: Sc }).__scene; return { ...sc.controls.target, follow: sc.follow, W: sc.W }; });
+  const before = await cam();
+  const box = (await page.locator('.board3d-canvas canvas').boundingBox())!;
+  // zoom in toward a point well right of the middle
+  await page.mouse.move(box.x + box.width * 0.85, box.y + box.height * 0.5);
+  for (let i = 0; i < 12; i++) { await page.mouse.wheel(0, -300); await page.waitForTimeout(60); }
+  await page.waitForTimeout(600);
+  const after = await cam();
+  expect(after.follow).toBe(false);
+  const moved = Math.hypot(after.x - before.x, after.z - before.z);
+  expect(moved).toBeGreaterThan(after.W * 0.05);
+  expect(Math.abs(after.x)).toBeLessThanOrEqual(after.W * 0.62 + 1e-6);
+  expect(Math.abs(after.z)).toBeLessThanOrEqual(after.W * 0.62 + 1e-6);
+  await page.locator('.recenter').click();
+  await expect.poll(async () => (await cam()).follow).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test('colours: two players can\'t pick the same one; a player changes colour during the game', async ({ page }) => {
+  const errors = watchErrors(page);
+  await freshStart(page, { fx: { gfx: '2d', sound: false, vibrate: false, shake: false, cinema: false } });
+  await page.getByText('Νέα παρτίδα σε αυτό το κινητό').click();
+  for (const n of ['Α', 'Β']) {
+    await page.getByText('Προσθήκη παίκτη').click();
+    await page.locator('.pedit input').first().fill(n);
+  }
+  // the editor is open for Β: Α's colour is taken
+  await expect(page.locator('.pedit .swatch.taken')).toHaveCount(1);
+  await expect(page.locator('.pedit .swatch.taken')).toBeDisabled();
+  await page.getByText('Έναρξη παιχνιδιού').click();
+  await expect(page.locator('.gamebar')).toBeVisible();
+  if (await page.locator('.handoff .btn').count()) await page.locator('.handoff .btn').click();
+  await page.locator('nav.dock button', { hasText: 'Παίκτες' }).click();
+  const colorsBefore = await page.evaluate(() => JSON.parse(localStorage.getItem('gtn-save')!).game.players.map((p: { color: string }) => p.color));
+  await page.getByRole('button', { name: 'Αλλαγή χρώματος' }).first().click();
+  await expect(page.locator('.recolor .swatch.taken')).toHaveCount(1);
+  await page.locator('.recolor .swatch:not(.taken):not(.on)').first().click();
+  const colorsAfter = await page.evaluate(() => JSON.parse(localStorage.getItem('gtn-save')!).game.players.map((p: { color: string }) => p.color));
+  expect(colorsAfter[0]).not.toBe(colorsBefore[0]);
+  expect(colorsAfter[1]).toBe(colorsBefore[1]);
+  expect(errors).toEqual([]);
+});
+
+test('rule presets by game length fill in the rules; changing one shows "your own rules"', async ({ page }) => {
+  const errors = watchErrors(page);
+  await freshStart(page, { fx: { gfx: '2d', sound: false, vibrate: false, shake: false, cinema: false } });
+  await page.getByText('Νέα παρτίδα σε αυτό το κινητό').click();
+  for (const n of ['Α', 'Β']) {
+    await page.getByText('Προσθήκη παίκτη').click();
+    await page.locator('.pedit input').first().fill(n);
+  }
+  await page.locator('nav.tabs button', { hasText: 'Κανόνες' }).click();
+  await expect(page.locator('.preset.on')).toContainText('Χωρίς όριο');
+  await page.locator('.preset', { hasText: 'Γρήγορη' }).click();
+  await expect(page.locator('.preset.on')).toContainText('Γρήγορη');
+  await expect(page.getByLabel(/Κρίση αγοράς/)).toBeChecked();
+  await page.getByLabel(/Επίδομα ουραγού/).check();
+  await expect(page.locator('.preset.on')).toHaveCount(0);
+  await expect(page.getByText(/Δικοί σας κανόνες \(αλλάξατε/)).toBeVisible();
+  await page.locator('.preset', { hasText: 'Γρήγορη' }).click();
+  await page.getByText('Έναρξη παιχνιδιού').click();
+  const r = await page.evaluate(() => JSON.parse(localStorage.getItem('gtn-save')!).game.rules);
+  expect(r).toMatchObject({ timeLimitMin: 30, startCash: 1000, crisis: { every: 5 } });
+  expect(r.underdog).toBeUndefined();
+  expect(errors).toEqual([]);
+});
+
 test('landing on someone else\'s property: the rent card', async ({ page }) => {
   const errors = watchErrors(page);
   await freshStart(page, { fx: { gfx: '2d', sound: false, vibrate: false, shake: false, cinema: false } });

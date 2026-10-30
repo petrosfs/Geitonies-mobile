@@ -11,7 +11,13 @@ let loadingThumbs: Promise<void> | null = null;
 const thumbWaiters = new Set<() => void>();
 export function loadThumbs(): Promise<void> {
   loadingThumbs ??= import('./three/thumbs')
-    .then((m) => { thumbs = m; thumbWaiters.forEach((f) => f()); })
+    .then((m) => {
+      thumbs = m;
+      thumbWaiters.forEach((f) => f());
+      // get the picture maker ready in a quiet moment, so the first pictures don't make the screen wait
+      const w = window as Window & { requestIdleCallback?: (f: () => void) => number };
+      (w.requestIdleCallback ?? ((f: () => void) => window.setTimeout(f, 200)))(() => m.warmUp());
+    })
     .catch(() => { loadingThumbs = null; }); // offline before it was cached: try again next time
   return loadingThumbs;
 }

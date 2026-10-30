@@ -2,6 +2,8 @@ import { BOARDS, isOwnable } from './boards';
 import { buildCards } from './cards';
 import { defaultName, validNameMap } from './cities';
 import { cleanHouseRules, firesAt } from './houserules';
+import { freeColor, uniqueColors } from './rematch';
+import { COLORS } from '../colors';
 import type {
   Action, Board, Card, CustomRule, Game, Offer, Owed, Pending, Player, PlayerStats, RuleDo, RuleWho, Setup, Stats, Trade,
 } from './types';
@@ -188,7 +190,7 @@ export function newGame(setup: Setup, seed: number, now: number): Game {
     nameMap: validNameMap(setup.boardId, setup.nameMap),
     prices: validPrices(b, setup.prices),
     rules: cleanHouseRules(setup.rules, b),
-    players: setup.players.map((p) => ({
+    players: uniqueColors(setup.players).map((p) => ({
       ...p, cash: startCashOf(setup.rules, b.startCash), pos: 0, jail: false, jailTries: 0, jailCards: [], out: false, lapped: false,
     })),
     cur: 0, startIdx: 0, rolled: false, again: false, doubles: 0, dice: null,
@@ -951,10 +953,19 @@ export function apply(prev: Game, by: string, a: Action, now: number): Game {
       if (g.players.filter((x) => !x.out).length >= 10) fail('tooMany');
       const b = board(g);
       g.players.push({
-        id: np.id, name: String(np.name).trim().slice(0, 24) || '?', color: np.color, emoji: np.emoji, device: np.device,
+        id: np.id, name: String(np.name).trim().slice(0, 24) || '?', color: freeColor(np.color, g.players.map((x) => x.color)), emoji: np.emoji, device: np.device,
         cash: startCashOf(g.rules, b.startCash), pos: 0, jail: false, jailTries: 0, jailCards: [], out: false, lapped: false,
       });
       log(g, 'joined', { p: np.id });
+      break;
+    }
+    case 'setColor': {
+      // a player picks another colour during the game; nobody else may have it
+      if (!me || !COLORS.includes(a.color)) fail('notNow');
+      if (g.players.some((x) => x.id !== me.id && x.color === a.color)) fail('colorTaken');
+      if (me.color === a.color) return prev;
+      me.color = a.color;
+      log(g, 'recolored', { p: me.id });
       break;
     }
     case 'kick': {

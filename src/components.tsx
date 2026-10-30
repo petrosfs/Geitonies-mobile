@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useReducer, type ReactNode } from 'react';
 import { pieceText } from './three/piece-list';
 import { useThumbs } from './thumbs-loader';
 
@@ -9,8 +9,10 @@ export function PieceIcon({ id, color, size = 20 }: { id: string; color: string;
   // render at twice the displayed size (sharp on phone screens); few sizes, so the cache stays small
   const px = size > 100 ? 320 : size > 56 ? 192 : 128;
   const th = useThumbs();
-  if (!th) return <span className="piece-img" style={{ display: 'inline-block', width: size, height: size }} />;
-  const src = th.pieceThumb(id, color, px);
+  const [, redraw] = useReducer((n: number) => n + 1, 0);
+  const src = th ? th.thumbSoon(id, color, px, redraw) : undefined;
+  // still being drawn (a few frames at most): keep its place
+  if (src === undefined) return <span className="piece-img" style={{ display: 'inline-block', width: size, height: size }} />;
   if (!src) return <span className="piece-txt" style={{ fontSize: size * 0.85 }}>{pieceText(id)}</span>;
   return <img className="piece-img" src={src} alt="" width={size} height={size} />;
 }

@@ -56,6 +56,9 @@ export interface SceneEvents {
 
 interface TokenState {
   group: THREE.Group;
+  /** the piece itself (rebuilt when the player changes colour) */
+  piece: THREE.Object3D;
+  color: string;
   sprite: THREE.Sprite;
   shown: number;
   path: number[];
@@ -122,6 +125,8 @@ export class Scene3D {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.shadowMap.enabled = true;
+    // don't stop to read the shader compiler's log whenever something new appears (pieces, houses, cages)
+    this.renderer.debug.checkShaderErrors = false;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
@@ -137,7 +142,11 @@ export class Scene3D {
     this.camera = new THREE.PerspectiveCamera(38, 1, 0.8, 160); // near/far tight -> more depth precision on phones
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
-    this.controls.enablePan = false;
+    // zoom toward the point under the mouse / between the fingers, and slide the board (right button,
+    // two fingers); the camera stays over the board, and 🎯 brings back the automatic camera
+    this.controls.zoomToCursor = true;
+    this.controls.enablePan = true;
+    this.controls.screenSpacePanning = false;
     this.controls.minPolarAngle = 0.12;
     this.controls.maxPolarAngle = 1.3;
 
@@ -327,7 +336,7 @@ export class Scene3D {
       return m;
     });
     this.ring.scale.setScalar(this.tokenScale());
-    this.controls.minDistance = W * 0.45;
+    this.controls.minDistance = W * 0.22;
     this.controls.maxDistance = W * 2.4;
     this.placeCamera(0, true);
     this.tokens.forEach((t) => this.scene.remove(t.group));
@@ -479,6 +488,17 @@ export class Scene3D {
     sph.radius += (radius - sph.radius) * speed;
     this.camera.position.copy(this.controls.target).add(new THREE.Vector3().setFromSpherical(sph));
     this.camera.lookAt(this.controls.target);
+  }
+
+  /** after the player zooms or slides: never lose the board (the point looked at stays over it) */
+  private keepOverBoard() {
+    const lim = this.W * 0.62;
+    const t = this.controls.target;
+    const x = Math.max(-lim, Math.min(lim, t.x)), z = Math.max(-lim, Math.min(lim, t.z)), y = Math.max(0, Math.min(1, t.y));
+    if (x === t.x && y === t.y && z === t.z) return;
+    const shift = new THREE.Vector3(x - t.x, y - t.y, z - t.z);
+    t.add(shift);
+    this.camera.position.add(shift);
   }
 
   private resize() {
@@ -701,7 +721,7 @@ export class Scene3D {
     grp.add(sprite);
     grp.scale.setScalar(this.tokenScale());
     this.scene.add(grp);
-    return { group: grp, sprite, shown: 0, path: [], hopStart: 0, from: new THREE.Vector3(), to: new THREE.Vector3(), photoKey: photo ?? '', glide: GLIDERS.has(emoji), jailed: false, cageStart: 0, cageState: 'on' };
+    return { group: grp, piece, color, sprite, shown: 0, path: [], hopStart: 0, from: new THREE.Vector3(), to: new THREE.Vector3(), photoKey: photo ?? '', glide: GLIDERS.has(emoji), jailed: false, cageStart: 0, cageState: 'on' };
   }
 
   /** direction of travel at square i, as a y-rotation for a piece facing +x */
@@ -727,6 +747,15 @@ export class Scene3D {
         continue;
       }
       const photo = this.photos[p.id];
+      if (t && t.color !== p.color) {
+        // the player picked another colour: new piece and label, same place
+        t.group.remove(t.piece);
+        t.piece.traverse((o) => { (o as THREE.Mesh).geometry?.dispose(); });
+        t.piece = buildPiece(p.emoji, p.color);
+        t.group.add(t.piece);
+        (t.sprite.material as THREE.SpriteMaterial).map = labelTexture(p.color, p.emoji, photo);
+        t.color = p.color;
+      }
       if (t && t.photoKey !== (photo ?? '')) {
         (t.sprite.material as THREE.SpriteMaterial).map = labelTexture(p.color, p.emoji, photo);
         t.sprite.visible = !!photo;
@@ -913,6 +942,8 @@ export class Scene3D {
       this.dice.forEach((m, k) => this.paintFaces(m, sim.faces[k]));
       this.diceAnim = { frames: sim.frames, hits: sim.hits, start: performance.now(), played: 0, values };
       this.holdUntil = performance.now() + (sim.frames.length / 60) * 1000 + 250;
+      this.chase = null; // a new throw: the camera leaves the last moved piece and shows the board
+      this.flashQueue = []; this.coinQueue = []; // anything not shown yet belongs to the last move: never replay it after this one
       this.setBusy(true);
     } catch (e) {
       console.error('dice', e);
@@ -1166,6 +1197,7 @@ export class Scene3D {
     }
     this.followStep(now);
     this.controls.update();
+    if (!this.follow) this.keepOverBoard();
     this.renderer.render(this.scene, this.camera);
   }
 }

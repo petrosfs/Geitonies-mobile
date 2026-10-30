@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.14.0
+- Ready-made rule sets by how long the game should last (setup → Rules): Quick (~30′), Normal (~1 hour), Long (~1.5 hours) or No limit. Each fills in the time limit, starting money and a few rules; anything can still be changed.
+- One colour per player: a colour someone already has can't be picked (setup, online lobby, joining during a game, rematch).
+- Change your colour during the game (Players → 🎨), to any colour nobody has.
+- Top left on the 3D board: the last 4 moves instead of only the last one (purchases and the text of the cards included), shown when the piece gets there.
+- Zoom toward the point under the mouse or between your fingers, and slide the board (right mouse button or two fingers); the camera always stays over the board, and 🎯 brings back the automatic camera.
+- Fix: a banner (rent, tax, Start…) cut short by the next roll came back after that move; now banners, square flashes and coins of an earlier roll are dropped, and the camera stops following the previous piece when the dice are thrown.
+- Smoother: the pictures of the pieces no longer freeze the screen (the piece picker took up to several seconds on slow devices); they are drawn a few per frame and the drawing is prepared in advance. The 3D board no longer pauses to check new shaders. A phone whose connection comes back reconnects at once.
+
 ## 1.13.2
 - README: a short "Feedback" section linking to the issue forms for ideas and bug reports (the game itself is unchanged).
 

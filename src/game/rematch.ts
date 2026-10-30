@@ -23,6 +23,23 @@ export function setupFromGame(g: Game): Setup {
   };
 }
 
+/** the first colour nobody in `taken` has (or `want` if it is free) */
+export function freeColor(want: string, taken: Iterable<string>): string {
+  const used = new Set(taken);
+  if (!used.has(want)) return want;
+  return COLORS.find((c) => !used.has(c)) ?? want;
+}
+
+/** no two players with the same colour: whoever came first keeps it, the others get a free one */
+export function uniqueColors<T extends { color: string }>(players: T[]): T[] {
+  const used: string[] = [];
+  return players.map((p) => {
+    const color = freeColor(p.color, used);
+    used.push(color);
+    return color === p.color ? p : { ...p, color };
+  });
+}
+
 /** a player joining the line-up keeps their colour and piece unless someone already has them */
 export function lookUnique(p: PlayerSetup, others: PlayerSetup[]): PlayerSetup {
   const colors = new Set(others.map((o) => o.color));

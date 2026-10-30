@@ -21,6 +21,8 @@ function setup() {
     canvas.width = canvas.height = SIZE;
     renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
     renderer.setPixelRatio(1);
+    // don't stop to read the shader compiler's log after every new material (a long freeze on phones)
+    renderer.debug.checkShaderErrors = false;
     renderer.setSize(SIZE, SIZE, false);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.setClearColor(0x000000, 0);
@@ -33,6 +35,57 @@ function setup() {
     renderer = null;
   }
   return renderer;
+}
+
+/** get the picture maker ready (renderer, lighting), e.g. while the player looks at the home screen */
+export function warmUp() { setup(); }
+
+/*
+ * Many new pictures at once (the piece picker shows 23) would freeze the screen. A few are drawn
+ * straight away in each frame (about 12 ms' worth); the rest wait for the next frames and appear then.
+ */
+const BUDGET_MS = 12;
+let spent = 0;
+let resetQueued = false;
+const pending = new Map<string, { id: string; color: string; px: number; done: Set<() => void> }>();
+let pumping = false;
+
+function chargeFrame(ms: number) {
+  spent += ms;
+  if (!resetQueued) { resetQueued = true; requestAnimationFrame(() => { spent = 0; resetQueued = false; }); }
+}
+
+function pump() {
+  pumping = false;
+  const start = performance.now();
+  for (const [key, job] of pending) {
+    if (performance.now() - start > BUDGET_MS) break;
+    pending.delete(key);
+    pieceThumb(job.id, job.color, job.px);
+    job.done.forEach((f) => f());
+  }
+  if (pending.size) { pumping = true; requestAnimationFrame(pump); }
+}
+
+/**
+ * The picture now if it is ready or there is time left in this frame; otherwise `undefined`,
+ * and `onReady` is called when it has been drawn. `null` means no 3D on this device.
+ */
+export function thumbSoon(id: string, color: string, px: number, onReady: () => void): string | null | undefined {
+  const key = id + '|' + color + '|' + px;
+  const hit = cache.get(key);
+  if (hit) return hit;
+  if (spent < BUDGET_MS && !pending.size) {
+    const t0 = performance.now();
+    const url = pieceThumb(id, color, px);
+    chargeFrame(performance.now() - t0);
+    return url;
+  }
+  const job = pending.get(key) ?? { id, color, px, done: new Set<() => void>() };
+  job.done.add(onReady);
+  pending.set(key, job);
+  if (!pumping) { pumping = true; requestAnimationFrame(pump); }
+  return undefined;
 }
 
 /** image URL of piece `id` in `color`, or null if 3D isn't available */
@@ -63,12 +116,8 @@ export function pieceThumb(id: string, color: string, px = SIZE): string | null 
     cam.lookAt(center);
     r.render(scene, cam);
     const url = r.domElement.toDataURL('image/png');
-    scene.traverse((o) => {
-      const m = o as THREE.Mesh;
-      m.geometry?.dispose?.();
-      const mat = m.material as THREE.Material | THREE.Material[] | undefined;
-      if (Array.isArray(mat)) mat.forEach((x) => x.dispose()); else mat?.dispose?.();
-    });
+    // geometry goes; materials stay, so the next picture reuses the compiled shaders instead of compiling again
+    scene.traverse((o) => { (o as THREE.Mesh).geometry?.dispose?.(); });
     cache.set(key, url);
     return url;
   } catch {

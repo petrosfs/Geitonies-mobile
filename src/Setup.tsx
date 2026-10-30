@@ -3,6 +3,7 @@ import { store } from './store';
 import { hasWebGL, requestMotion } from './fx';
 import { BOARDS } from './game/boards';
 import { startCashOf } from './game/engine';
+import { applyPreset, matchPreset, PRESET_IDS } from './game/presets';
 import { CITIES, CITY_IDS, defaultName } from './game/cities';
 import { CUSTOM_EFFECTS, type CustomEffectKind } from './game/cards';
 import type { CustomCard, CustomRule, Deck, Effect, PlayerSetup, RuleWho, Setup } from './game/types';
@@ -92,10 +93,13 @@ function PlayersEditorInner({ players, photos, onChange, canRemoveOthers, showDe
                 <div className="field">
                   <span>{t('color')}</span>
                   <div className="swatches">
-                    {COLORS.map((c) => (
-                      <button key={c} className={'swatch' + (p.color === c ? ' on' : '')} style={{ background: c }}
-                        aria-label={c} onClick={() => upd(p.id, { color: c })} />
-                    ))}
+                    {COLORS.map((c) => {
+                      const taken = [...players, ...others].some((o) => o.id !== p.id && o.color === c);
+                      return (
+                        <button key={c} className={'swatch' + (p.color === c ? ' on' : '') + (taken ? ' taken' : '')} style={{ background: c }}
+                          disabled={taken} aria-label={taken ? t('colorTaken') : c} onClick={() => upd(p.id, { color: c })} />
+                      );
+                    })}
                   </div>
                 </div>
                 <div className="field">
@@ -468,8 +472,20 @@ function RulesTab({ setup, set, online }: { setup: Setup; set: (p: Partial<Setup
   const { t, m } = useT();
   const r = setup.rules;
   const rules = (patch: Partial<Setup['rules']>) => set({ rules: { ...r, ...patch } });
+  const boardCash = BOARDS[setup.boardId].startCash;
+  const preset = matchPreset(r, boardCash);
   return (
     <div className="rules">
+      <h3>⏱️ {t('gameLength')}</h3>
+      <div className="presets">
+        {PRESET_IDS.map((id) => (
+          <button key={id} className={'preset' + (preset === id ? ' on' : '')} onClick={() => set({ rules: applyPreset(r, id, boardCash) })}>
+            <strong>{t('preset_' + id)}</strong>
+            <span className="small muted">{t('presetHint_' + id)}</span>
+          </button>
+        ))}
+      </div>
+      <p className="small muted">{preset ? t('presetNote') : t('presetCustom')}</p>
       <h3>{t('auctionMode')}</h3>
       {(['open', 'sealed'] as const).map((a) => (
         <label key={a} className="check">

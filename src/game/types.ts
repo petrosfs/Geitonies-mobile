@@ -211,6 +211,8 @@ export type Action =
   | { t: 'counter'; trade: Trade }
   | { t: 'cancelTrade' }
   | { t: 'kick'; id: string }
+  /** a player changes their colour (must be free) */
+  | { t: 'setColor'; color: string }
   /** host only: a new player joins a game that has already started */
   | { t: 'addPlayer'; player: PlayerSetup }
   | { t: 'tick' };

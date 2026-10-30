@@ -6,7 +6,7 @@ import { loadIceServers, peerOptions } from './netconfig';
 import { apply, autoAction, newGame, RuleError, waiting } from './game/engine';
 import { BOARDS } from './game/boards';
 import type { Action, Game, Lang, PlayerSetup, Setup } from './game/types';
-import { lookUnique, setupFromGame } from './game/rematch';
+import { freeColor, lookUnique, setupFromGame } from './game/rematch';
 
 export type Mode = 'local' | 'host' | 'client';
 export type Screen = 'home' | 'setup' | 'join' | 'lobby' | 'game' | 'latejoin';
@@ -181,6 +181,8 @@ class Store {
   constructor() {
     void loadIceServers();
     document.addEventListener('visibilitychange', () => this.onResume());
+    // the phone got its connection back (e.g. Wi-Fi → mobile data): reconnect at once instead of waiting
+    window.addEventListener?.('online', () => this.onResume());
     const prefs = loadPrefs();
     this.s = {
       screen: 'home', lang: prefs.lang, fx: prefs.fx, mode: 'local', device: prefs.device,
@@ -665,7 +667,13 @@ class Store {
         case 'join': {
           if (!device || this.s.game) return;
           const others = this.s.setup.players.filter((p) => p.device !== device);
-          const incoming = m.players.slice(0, Math.max(0, 10 - others.length)).map((p) => ({ ...p, device }));
+          // a colour someone already has (two phones picked it at the same moment): give a free one
+          const taken = others.map((p) => p.color);
+          const incoming = m.players.slice(0, Math.max(0, 10 - others.length)).map((p) => {
+            const color = freeColor(p.color, taken);
+            taken.push(color);
+            return { ...p, color, device };
+          });
           if (incoming.length < m.players.length) sendFramed(conn, { type: 'err', key: 'full' } satisfies Msg);
           const photos = { ...this.s.photos };
           incoming.forEach((p) => { if (p.photo) photos[p.id] = p.photo; else delete photos[p.id]; });
